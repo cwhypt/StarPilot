@@ -28,6 +28,7 @@
 | 11 | [11_ars510_vs_filter.md](11_ars510_vs_filter.md) | ars510 解析器（读数据）vs 过滤器（保 AEB）：互补而非替代 | 完成 |
 | 12 | [12_starpilot_vs_ars510_upstream_status.md](12_starpilot_vs_ars510_upstream_status.md) | 两 repo 关系；上游走 commaai/opendbc#3860；StarPilot 已集成但缺 #230 修复 | 完成 |
 | 13 | [13_capabilities_at_88c7398.md](13_capabilities_at_88c7398.md) | 按当前代码：过滤器×Alpha Long×RadarMode 配置矩阵，能做/不能做 | 完成 |
+| 14 | [14_branches_and_optimization_opportunities.md](14_branches_and_optimization_opportunities.md) | 上游各分支对比；不装过滤器时的优化清单（PR #230、雷达 PCS_ALARM/REQUIRED_DECEL 等） | 完成 |
 
 > 05 对 01/04 有修正，并含一条**后续更正**：无过滤器时 stock ACCEL_CMD 取不到，但据上游 ars510-radar，雷达在 bus 1 上的目标数据在 UDS 禁用后仍存在（纯软件即可读），所以"自己重建的只减不增制动 cap"（04 方案 C）无需额外硬件；直接 min(stock ACCEL_CMD) 才需要过滤器。
 
