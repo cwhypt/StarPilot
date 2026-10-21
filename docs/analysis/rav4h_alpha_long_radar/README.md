@@ -21,6 +21,8 @@
 | 4 | [04_options_and_recommendation.md](04_options_and_recommendation.md) | 方案对比与建议、测试计划、待用户回答的问题 | 完成（未改代码） |
 | 5 | [05_reclaim_stock_accel_min_fusion.md](05_reclaim_stock_accel_min_fusion.md) | 能否回收原车 ACCEL_CMD 并与视觉取 min；硬件前提；修正 01/04 的 Q1 | 完成（纯代码阅读，用户无实车数据） |
 
+| 6 | [06_stock_safety_plus_starpilot_features.md](06_stock_safety_plus_starpilot_features.md) | 目标"原车 AEB/FCW + StarPilot 功能"；repo 内的切换机制；R1–R4 路线对比 | 完成（Reddit 帖子未能读取） |
+
 > 05 对 01/04 有修正，并含一条**后续更正**：无过滤器时 stock ACCEL_CMD 取不到，但据上游 ars510-radar，雷达在 bus 1 上的目标数据在 UDS 禁用后仍存在（纯软件即可读），所以"自己重建的只减不增制动 cap"（04 方案 C）无需额外硬件；直接 min(stock ACCEL_CMD) 才需要过滤器。
 
 ## 一句话结论
