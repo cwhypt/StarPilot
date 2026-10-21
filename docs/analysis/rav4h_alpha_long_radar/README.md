@@ -16,9 +16,15 @@
 | # | 文档 | 内容 | 状态 |
 |---|------|------|------|
 | 1 | [01_architecture_and_signal_path.md](01_architecture_and_signal_path.md) | repo 结构、alpha long 开启后的开关链、雷达/视觉信号路径 | 完成（纯代码阅读） |
-| 2 | 待写 | radard 融合逻辑：雷达轨迹在何种条件下被采用 / 被丢弃 | 未开始 |
-| 3 | 待写 | planner / MPC 如何消费 leadOne，是否有雷达专属的安全兜底 | 未开始 |
-| 4 | 待写 | 方案对比与建议（含改动点、风险、测试） | 未开始 |
+| 2 | [02_radard_fusion_gating.md](02_radard_fusion_gating.md) | radard 融合逻辑：雷达轨迹在何种条件下被采用 / 被丢弃 | 完成（纯代码阅读） |
+| 3 | [03_planner_mpc_and_safety_nets.md](03_planner_mpc_and_safety_nets.md) | planner / MPC 如何消费 leadOne，剩余安全网（FCW/AEB） | 完成（纯代码阅读） |
+| 4 | [04_options_and_recommendation.md](04_options_and_recommendation.md) | 方案对比与建议、测试计划、待用户回答的问题 | 完成（未改代码） |
+
+## 一句话结论
+
+Alpha Long 通过 UDS 关闭雷达 ECU，stock `ACCEL_CMD`/AEB/FCW 随之消失且无法恢复；前车感知默认 100% 来自视觉，
+即使开 `ToyotaRadarMode`，radard 也只让雷达"校正"视觉已确认的 lead。推荐：先验证 bus 1 数据（Q1）→ 开 Mode 2 → 仅记录的一致性监控 →
+再做"只减不增"的雷达制动 cap。详见 04。
 
 ## 证据等级约定
 
@@ -29,4 +35,5 @@
 
 ## 未决问题（跨文档汇总）
 
-见各文档末尾；汇总见 01 文档第 7 节。
+需要用户/实车回答的问题汇总在 [04 §5](04_options_and_recommendation.md)（Q1–Q5、Q10）；
+实现阶段的技术问题：Q6、Q7（02 §7）、Q8、Q9（03 §7）。
