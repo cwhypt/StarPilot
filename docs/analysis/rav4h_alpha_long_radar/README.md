@@ -20,9 +20,8 @@
 | 3 | [03_planner_mpc_and_safety_nets.md](03_planner_mpc_and_safety_nets.md) | planner / MPC 如何消费 leadOne，剩余安全网（FCW/AEB） | 完成（纯代码阅读） |
 | 4 | [04_options_and_recommendation.md](04_options_and_recommendation.md) | 方案对比与建议、测试计划、待用户回答的问题 | 完成（未改代码） |
 | 5 | [05_reclaim_stock_accel_min_fusion.md](05_reclaim_stock_accel_min_fusion.md) | 能否回收原车 ACCEL_CMD 并与视觉取 min；硬件前提；修正 01/04 的 Q1 | 完成（纯代码阅读，用户无实车数据） |
-
 | 6 | [06_stock_safety_plus_starpilot_features.md](06_stock_safety_plus_starpilot_features.md) | 目标"原车 AEB/FCW + StarPilot 功能"；repo 内的切换机制；R1–R4 路线对比 | 完成（Reddit 帖子未能读取） |
-| 7 | [07_radar_filter_hardware_checklist.md](07_radar_filter_hardware_checklist.md) | R3 路线的过滤器选型清单（必须在 bus 0 发 0x2AA 等）| 完成（产品页无法访问，未核实） |
+| 7 | [07_radar_filter_hardware_checklist.md](07_radar_filter_hardware_checklist.md) | R3 路线的过滤器选型清单（bus 0 上须有 0x2AA 或 0x2FF 等，见 08 更正）| 完成（产品页无法访问，未核实） |
 | 8 | [08_oneclone_radar_acc_filter_eval.md](08_oneclone_radar_acc_filter_eval.md) | OneClone 过滤器（smart_dsu 固件）评估：可保留 AEB/FCW，但不能读雷达 ACCEL_CMD | 完成（固件为二手转述） |
 | 9 | [09_who_controls_what_with_filter.md](09_who_controls_what_with_filter.md) | 装过滤器后的分工：0x343 日常加减速归 StarPilot，0x283/0x344 AEB、0x411 FCW 归原车 | 完成 |
 

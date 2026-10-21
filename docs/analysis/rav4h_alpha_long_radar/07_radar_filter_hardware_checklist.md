@@ -9,7 +9,7 @@
 - 之后（`interface.py:154-159`）：`use_sdsu` 为真时**不置** `DISABLE_RADAR` → 不发 UDS 禁用 → 雷达保持工作；`openpilotLongitudinalControl = use_sdsu and alpha_long`，**Alpha Long 开关仍需打开**。
 - 测试 `toyota/tests/test_ars510.py` 用 `fingerprint[0][0x2aa] = 8` 模拟"装了过滤器"。
 
-→ **过滤器必须在 bus 0（车内 PT 总线）上周期发送 0x2AA 心跳，且上电后足够早（在 openpilot 指纹采集窗口内）出现**。不发 0x2AA 的过滤器：StarPilot 当作没装，照样 UDS 关雷达，AEB 仍丢。这是购买前必须向卖家确认的第一项。
+→ **过滤器必须在 bus 0（车内 PT 总线）上发送 0x2AA 或 0x2FF**（更正，见 08：`interfaces.py:310` 中 `0x2FF in fingerprint[0]` 也会置 `SMART_DSU` → `use_sdsu`；0x2AA 额外置 `RADAR_CAN_FILTER`）**，且上电后足够早（在 openpilot 指纹采集窗口内）出现**。两者都不发的过滤器：StarPilot 当作没装，照样 UDS 关雷达，AEB 仍丢。这是购买前必须向卖家确认的第一项。
 
 ## 2. 功能要求
 
@@ -23,7 +23,7 @@
 ## 3. 购买前问卖家的问题
 
 1. 是否支持 **RAV4 / RAV4 Hybrid 2023-2025（Continental ARS510 雷达，fwdRadar `8821F0R03100`）**？
-2. 是否在 bus 0 广播 **0x2AA**？（与 sunnypilot/openpilot 社区"CAN filter"检测一致即可。）
+2. 是否在 bus 0 广播 **0x2AA 或 0x2FF**？（与 sunnypilot/openpilot 社区"CAN filter"检测一致即可。）
 3. 被拦截的雷达 0x343 是否可在某条总线上读到？
 4. 装后原车 **PCS/AEB 与 FCW 是否正常、仪表是否无 PCS 故障灯**？
 5. 安装位置与方式：是否插在雷达接插件处（前格栅/保险杠后），是否需要拆格栅、是否附带转接线/延长线、供电来源。
