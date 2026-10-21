@@ -24,6 +24,7 @@
 | 7 | [07_radar_filter_hardware_checklist.md](07_radar_filter_hardware_checklist.md) | R3 路线的过滤器选型清单（bus 0 上须有 0x2AA 或 0x2FF 等，见 08 更正）| 完成（产品页无法访问，未核实） |
 | 8 | [08_oneclone_radar_acc_filter_eval.md](08_oneclone_radar_acc_filter_eval.md) | OneClone 过滤器（smart_dsu 固件）评估：可保留 AEB/FCW，但不能读雷达 ACCEL_CMD | 完成（固件为二手转述） |
 | 9 | [09_who_controls_what_with_filter.md](09_who_controls_what_with_filter.md) | 装过滤器后的分工：0x343 日常加减速归 StarPilot，0x283/0x344 AEB、0x411 FCW 归原车 | 完成 |
+| 10 | [10_why_no_min_and_how_to_close_gap.md](10_why_no_min_and_how_to_close_gap.md) | 为什么做不到 min、中间地带缺口、三种补法（改固件镜像 / canfilter / 软件 cap） | 完成 |
 
 > 05 对 01/04 有修正，并含一条**后续更正**：无过滤器时 stock ACCEL_CMD 取不到，但据上游 ars510-radar，雷达在 bus 1 上的目标数据在 UDS 禁用后仍存在（纯软件即可读），所以"自己重建的只减不增制动 cap"（04 方案 C）无需额外硬件；直接 min(stock ACCEL_CMD) 才需要过滤器。
 
