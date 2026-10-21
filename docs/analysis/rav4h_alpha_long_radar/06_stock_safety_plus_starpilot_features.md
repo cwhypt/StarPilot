@@ -18,7 +18,7 @@
 
 ## 2. 为什么 RAV4 上"AEB + openpilot 纵向"不能靠软件切换同时得到
 
-- AEB/FCW 是**雷达 ECU 的输出**（0x344 `PRE_COLLISION`、0x283、0x411 `PCS_HUD`），Alpha Long 的前提是雷达 TX 被 UDS 关闭（01 §3）。
+- AEB/FCW 是**雷达 ECU 的输出**（0x283 `PRE_COLLISION`、0x344 `PRE_COLLISION_2`、0x411 `PCS_HUD`），Alpha Long 的前提是雷达 TX 被 UDS 关闭（01 §3）。
 - 上游 ars510-radar 的说明（二手转述，见 05 更正）：禁用雷达会带走 AEB，仪表出现 "Pre-Collision System Malfunction"/PCS OFF；**只有在雷达线路上加 CAN filter**，让过滤器只丢弃雷达的 0x343、其余（含 PCS/AEB）放行，才能"openpilot 纵向 + 雷达 AEB 保留"。
 - 即：**同一时刻**既让 openpilot 发 0x343 又保留 AEB，在 RAV4 上要靠**硬件隔离**，软件切换做不到。
 

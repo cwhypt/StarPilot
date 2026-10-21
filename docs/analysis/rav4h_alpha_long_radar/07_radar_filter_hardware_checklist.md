@@ -16,7 +16,7 @@
 | 要求 | 原因（代码） |
 |------|-------------|
 | 串接在**雷达与车之间**，丢弃雷达发往车的 `ACC_CONTROL` 0x343 | openpilot 在 bus 0 发自己的 0x343（`carcontroller.py:583`），两个发送者会冲突 |
-| 放行 0x344 `PRE_COLLISION`、0x283、0x411 `PCS_HUD` 等其余雷达报文 | 保留原车 AEB/FCW；`carstate.py:129,200` 在未置 `DISABLE_RADAR` 时会读 `stockAeb`/`stockFcw` |
+| 放行 0x283 `PRE_COLLISION`、0x344 `PRE_COLLISION_2`、0x411 `PCS_HUD` 等其余雷达报文 | 保留原车 AEB/FCW；`carstate.py:129,200` 在未置 `DISABLE_RADAR` 时会读 `stockAeb`/`stockFcw` |
 | 不影响雷达 bus 1（雷达私有总线）输出 | ARS510 解析（`ToyotaRadarMode`）读 bus 1 |
 | （加分）把被丢弃的雷达 0x343 转发到某处供读取 | 实现 05 §3 "min(雷达 ACCEL_CMD, openpilot)" 需要；若过滤器直接吞掉，该功能做不了，但 AEB 仍保留 |
 
