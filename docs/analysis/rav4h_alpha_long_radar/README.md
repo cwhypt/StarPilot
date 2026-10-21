@@ -19,6 +19,9 @@
 | 2 | [02_radard_fusion_gating.md](02_radard_fusion_gating.md) | radard 融合逻辑：雷达轨迹在何种条件下被采用 / 被丢弃 | 完成（纯代码阅读） |
 | 3 | [03_planner_mpc_and_safety_nets.md](03_planner_mpc_and_safety_nets.md) | planner / MPC 如何消费 leadOne，剩余安全网（FCW/AEB） | 完成（纯代码阅读） |
 | 4 | [04_options_and_recommendation.md](04_options_and_recommendation.md) | 方案对比与建议、测试计划、待用户回答的问题 | 完成（未改代码） |
+| 5 | [05_reclaim_stock_accel_min_fusion.md](05_reclaim_stock_accel_min_fusion.md) | 能否回收原车 ACCEL_CMD 并与视觉取 min；硬件前提；修正 01/04 的 Q1 | 完成（纯代码阅读，用户无实车数据） |
+
+> 05 对 01/04 有修正：无 radar CAN filter 时，雷达被 UDS 静默且不在 panda 总线上，stock ACCEL_CMD 与 ARS510 数据大概率都不存在；"min 融合"需要过滤器硬件。
 
 ## 一句话结论
 
