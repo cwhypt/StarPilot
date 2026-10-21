@@ -72,3 +72,14 @@
 
 - 所有雷达私有总线信号的语义来自 ars510-radar 作者的 DBC 注释与文档（二手），不同固件/车可能不同；用户无车无 comma，均需实车 rlog 验证。
 - SGSP 分析只看了与纵向/雷达/Toyota 相关的提交与文件，未全面审阅。
+
+## 5. 补充：雷达私有总线上**没有** AEB 制动指令
+
+PR #230 的 `toyota_tss2_ars510.dbc` 在 bus 1 上定义的报文只有：PCS_STATE(0x100)、RADAR_CYCLE、TARGET_SUMMARY_A/B、EVENT_OBJECT(0x195)、EVENT_STATE(0x196)、RADAR_ALIVE、ACC_TARGET_1-4、RADAR_BOOT、OBJECT_STREAM。其中与碰撞相关的只有：
+
+- `PCS_ALARM`：**报警阶段**（与车内总线 0x283 的 PCSNOCHG、0x411 FCW 同步）——相当于 FCW，不是制动。
+- `REQUIRED_DECEL`：雷达在短 TTC 时算出的**所需减速度**（威胁评估量，公式见 DBC 注释）——不是发给制动系统的指令，也不代表原车决定刹车。
+
+真正的 AEB 制动请求（0x283 `PRE_COLLISION` 的 `FORCE`/`PRECOLLISION_ACTIVE`、0x344 `PRE_COLLISION_2` 的 `DSS1GDRV`/`PCSABK`）只在**车内总线**上，Alpha Long 无过滤器时被 UDS 静默，bus 1 上没有对应信号（就 DBC 所描述的范围而言）。
+
+→ 2a = 恢复"原车级 FCW 提示"；2b = 用雷达的威胁评估自己发起制动（经 openpilot 的 ACC_CONTROL，受 `ACCEL_MIN` 限制），是"类 AEB"而非原车 AEB；且只在 AEB 前的报警/短 TTC 阶段有信号，无法得知原车"此刻会不会全力刹车"。
