@@ -36,6 +36,7 @@
 | 15 | [15_upstream_update_20261023.md](15_upstream_update_20261023.md) | 上游更新检查：发布分支无变化；开发分支加入 2025 RAV4H 4 字节 0x2FF 过滤器正式支持 | 完成 |
 | 16 | [16_four_byte_2ff_filter_sources.md](16_four_byte_2ff_filter_sources.md) | 4 字节 0x2FF 来源（ocelot smart_dsu 心跳）、2025 RAV4H 实车来源（ars510 #66）、可购买的 SDSU | 完成 |
 | 17 | [17_wocsor_vs_ocelot_smartdsu.md](17_wocsor_vs_ocelot_smartdsu.md) | smartDSU 固件对比：wocsor 旧版 vs ocelot 新版（心跳、拦截、改写原车 0x343、开机伪造） | 完成 |
+| 18 | [18_filter_vs_stock_behavior_summary.md](18_filter_vs_stock_behavior_summary.md) | 装过滤器后与原车行为的区别（三种工况 + 新增风险） | 完成 |
 
 > 05 对 01/04 有修正，并含一条**后续更正**：无过滤器时 stock ACCEL_CMD 取不到，但据上游 ars510-radar，雷达在 bus 1 上的目标数据在 UDS 禁用后仍存在（纯软件即可读），所以"自己重建的只减不增制动 cap"（04 方案 C）无需额外硬件；直接 min(stock ACCEL_CMD) 才需要过滤器。
 
