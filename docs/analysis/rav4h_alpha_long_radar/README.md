@@ -34,6 +34,7 @@
 | 13 | [13_capabilities_at_88c7398.md](13_capabilities_at_88c7398.md) | 按当前代码：过滤器×Alpha Long×RadarMode 配置矩阵，能做/不能做 | 完成 |
 | 14 | [14_branches_and_optimization_opportunities.md](14_branches_and_optimization_opportunities.md) | 上游各分支对比；不装过滤器时的优化清单（PR #230、雷达 PCS_ALARM/REQUIRED_DECEL 等） | 完成 |
 | 15 | [15_upstream_update_20261023.md](15_upstream_update_20261023.md) | 上游更新检查：发布分支无变化；开发分支加入 2025 RAV4H 4 字节 0x2FF 过滤器正式支持 | 完成 |
+| 16 | [16_four_byte_2ff_filter_sources.md](16_four_byte_2ff_filter_sources.md) | 4 字节 0x2FF 来源（ocelot smart_dsu 心跳）、2025 RAV4H 实车来源（ars510 #66）、可购买的 SDSU | 完成 |
 
 > 05 对 01/04 有修正，并含一条**后续更正**：无过滤器时 stock ACCEL_CMD 取不到，但据上游 ars510-radar，雷达在 bus 1 上的目标数据在 UDS 禁用后仍存在（纯软件即可读），所以"自己重建的只减不增制动 cap"（04 方案 C）无需额外硬件；直接 min(stock ACCEL_CMD) 才需要过滤器。
 
