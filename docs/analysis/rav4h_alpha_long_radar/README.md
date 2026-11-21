@@ -39,6 +39,7 @@
 | 18 | [18_filter_vs_stock_behavior_summary.md](18_filter_vs_stock_behavior_summary.md) | 装过滤器后与原车行为的区别（三种工况 + 新增风险） | 完成 |
 | 19 | [19_upstream_update_20261120.md](19_upstream_update_20261120.md) | 2026-11-20 上游更新：分支迁移为 stable/testing；核心问题逐项核查 | 完成 |
 | 20 | [20_pr329_and_dsseb_fork.md](20_pr329_and_dsseb_fork.md) | PR #329 与 ds-sebastian fork：无 T2 现成实现；#329 修 testing 上 Alpha Long 清掉雷达接收器的问题 | 完成 |
+| 21 | [21_mode1_capabilities_and_pr230_contents.md](21_mode1_capabilities_and_pr230_contents.md) | 开 Alpha Long + ToyotaRadarMode=1 能做/不能做；#230 具体改了什么 | 完成 |
 
 > 05 对 01/04 有修正，并含一条**后续更正**：无过滤器时 stock ACCEL_CMD 取不到，但据上游 ars510-radar，雷达在 bus 1 上的目标数据在 UDS 禁用后仍存在（纯软件即可读），所以"自己重建的只减不增制动 cap"（04 方案 C）无需额外硬件；直接 min(stock ACCEL_CMD) 才需要过滤器。
 
