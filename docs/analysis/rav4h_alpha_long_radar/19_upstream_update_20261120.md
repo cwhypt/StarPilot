@@ -48,3 +48,18 @@
 - 只对 stable/testing 做了文件与关键字比对，未运行任何测试（缺 `capnp` 等依赖）。
 - testing 只拉取了最近 1206 个提交的浅历史；功能判断基于该树的当前内容。
 - 没有核对 PR #230 / opendbc#3860 在 GitHub 上的最新评论（当前环境没有可用的 GitHub 检索工具），只确认了 `refs/pull/230/head` 未变。
+
+## 6. 对照 15 号文档（10-23）的各条陈述，现在是否还成立
+
+| 15 号文档的陈述 | 2026-11-21 复核 |
+|---|---|
+| 发布分支 `StarPilot` 无更新（`823a5d5`） | **已过时**：现为 `0b2061df`（+35 提交，无 Toyota/雷达改动），且已迁移为 `stable` |
+| PR #230 head `b66ba75`、未合入 | **仍成立**（head 不变，stable/testing 均未含）。注：PR 在 `firestar5683/StarPilot`，不是 cwhypt fork |
+| 开发分支 SGSP `d28aa48`（+435） | **已过时**：该分支已从上游消失，内容即 `testing`（`256924b8`，1206 个提交） |
+| 开发分支有 2025 RAV4H + 4 字节 0x2FF 过滤器实车数据（`rav4_2025_filter_discovery.json`） | **仍成立**，现位于 `testing`；`radar_filter.py` 之后只有 `795799f4`（11-08，拆分测试文件）一次改动，逻辑未变 |
+| `radar_filter.py` 识别后不关雷达，开 Alpha Long → `0x1449`，关 → `0x1649` | **仍成立**（`testing` 的 `toyota.h` 含 `0x1449`，`interface.py` 引用 7 处） |
+| 发布分支没有 `radar_filter.py` / `toyota.h` 没有 `0x1449`；4 字节 0x2FF 走通用 smartDSU 路径 | **仍成立于 `stable`**：无 `radar_filter.py`，`toyota.h` 无 `0x1449`，`interfaces.py:311` 仍是 `0x2FF in fingerprint[0]` → `SMART_DSU` |
+| 恢复 RAV4 角度转向独立横向控制；Vehicle Controls 里的 Alpha Long 开关 | **仍在 `testing`**（`angle_control.py`、`galaxy/tests/test_alpha_vehicle_controls.py`），`stable` 没有 |
+| "将来装过滤器建议用含 `radar_filter.py` 的版本" | **仍成立**，且现在具体是 **`testing`**，而不是 `stable` |
+
+新增细节：`testing` 在 `radar_filter.py` 之外又有 `advert_filter.py`、`camera_2aa_filter.py`、`legacy_advert_filter.py` 等识别模块，但 `advert_filter.py` 明确排除了 `radar_filter.PROFILES` 里的车（`CARS = eps8_sdsu.CARS - radar_filter.PROFILES.keys()`），**不影响 RAV4 2023-25**；`rav4h_filter.py` 针对的是旧款 `TOYOTA_RAV4H`（2019-21）。
