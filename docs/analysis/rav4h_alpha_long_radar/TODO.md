@@ -14,7 +14,7 @@
 | # | 任务 | 状态 | 风险 | 依据 |
 |---|------|------|------|------|
 | T1 | 合入 PR #230（ARS510 解析器更新） | **完成**（合并提交 `94fefd3f`，测试：test_ars510 502 通过、toyota 目录 825 通过；未上车） | 低 | 14 §2 P1 |
-| T2 | 2a：雷达 `PCS_ALARM` → StarPilot FCW 告警（只告警，不控车）。已查 #329 / ds-sebastian fork：**无现成实现**（20） | 待做 | 低 | 14 §2 P2a、§5 |
+| T2 | 2a：雷达 `PCS_ALARM` → StarPilot FCW 告警（只告警，不控车）。已查 #329 / ds-sebastian fork：无现成实现（20）。**commaai/opendbc#3860 提交 `dea4a6a` 有 carstate 部分**（PCS_ALARM→stockFcw，含 POWER_UP 首帧过滤），可参考但需移植，且仍需映射到带提示的 `fcw` 事件（22） | 待做 | 低 | 14 §2 P2a、§5 |
 | T3 | 2b：雷达 `REQUIRED_DECEL` 兜底，**先只记录** | 待做 | 高（启用时） | 14 §2 P2b、§5 |
 | T4 | 只减不增的雷达 cap（ACC 目标），**先只记录** | 待做 | 中（启用时） | 04 方案 C、10 §3C、14 P3 |
 | T5 | radard 小修：读雷达 `aRel`；ARS510 测量去重 | 待做 | 低-中 | 02 §4、14 P4 |

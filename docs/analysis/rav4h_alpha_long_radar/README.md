@@ -15,6 +15,8 @@
 
 见 [TODO.md](TODO.md)（软件任务 T1–T7、实车验证 V1–V4、装过滤器后 F1–F4）。
 
+> **勘误（2026-11-21，见 22 §5）：** 12/19/20 号文档和 TODO 中"PR #230 仍 OPEN"未经核实；子 agent 读到的交叉引用称其为 closed。可确定的只是：#230 的提交没有进入 stable/testing。
+
 ## 进度表
 
 | # | 文档 | 内容 | 状态 |
@@ -40,6 +42,7 @@
 | 19 | [19_upstream_update_20261120.md](19_upstream_update_20261120.md) | 2026-11-20 上游更新：分支迁移为 stable/testing；核心问题逐项核查 | 完成 |
 | 20 | [20_pr329_and_dsseb_fork.md](20_pr329_and_dsseb_fork.md) | PR #329 与 ds-sebastian fork：无 T2 现成实现；#329 修 testing 上 Alpha Long 清掉雷达接收器的问题 | 完成 |
 | 21 | [21_mode1_capabilities_and_pr230_contents.md](21_mode1_capabilities_and_pr230_contents.md) | 开 Alpha Long + ToyotaRadarMode=1 能做/不能做；#230 具体改了什么 | 完成 |
+| 22 | [22_commaai_opendbc_pr3860.md](22_commaai_opendbc_pr3860.md) | commaai/opendbc#3860：官方 PR，已含 PCS_ALARM→stockFcw（T2 的 carstate 部分）；附 #230 状态勘误 | 完成 |
 
 > 05 对 01/04 有修正，并含一条**后续更正**：无过滤器时 stock ACCEL_CMD 取不到，但据上游 ars510-radar，雷达在 bus 1 上的目标数据在 UDS 禁用后仍存在（纯软件即可读），所以"自己重建的只减不增制动 cap"（04 方案 C）无需额外硬件；直接 min(stock ACCEL_CMD) 才需要过滤器。
 
