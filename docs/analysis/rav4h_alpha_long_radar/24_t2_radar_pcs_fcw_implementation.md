@@ -48,6 +48,19 @@
 
 ## 6. 上车后怎么验证
 
-1. `carParams.flags` 同时含 `ARS510_RADAR` 与 `DISABLE_RADAR`。
-2. rlog 中 bus 1 地址 0x100 的频率（期望约 10 Hz）；第一帧是否 `FF FF`。
-3. 平时 `carState.stockFcw` 恒为 False；不要刻意制造危险场景去触发。
+原则：**不刻意制造危险场景**。验证分五步，前一步不过就不往下做。工具：comma connect 下载 rlog；cabana 看 CAN（加载 `toyota_tss2_ars510` DBC 看 bus 1）；PlotJuggler / `tools/lib/logreader.py` 看 `carState`、`onroadEvents`。
+
+| 步骤 | 条件 | 看什么 | 通过标准 | 不通过意味着 |
+|---|---|---|---|---|
+| 0 配置 | Alpha Long 开、`ToyotaRadarMode=1`、无过滤器，重启 | `carParams.flags`；`carFw` 的 `fwdRadar` | flags 含 `ARS510_RADAR`(16384) 和 `DISABLE_RADAR`(4)；fwdRadar `8821F0R03100` | 门控没打开，T2 不会生效；fw 不同则 DBC 语义可能不同 |
+| 1 静态 | 停车、READY、P 挡，录 1-2 分钟 | `can` 中 src=1、地址 0x100 | 约 10 Hz 持续存在；上电后第一帧 `FF FF`，之后 `PCS_ALARM=0`；`carState.stockFcw` 恒 False；开机没有 BRAKE 提示 | **0x100 不存在 → T2 在你的车上无效**（V2），后面不用做，也说明 C 方案没意义 |
+| 2 日常驾驶 | 正常开几天（含高速、城市、停车场、弯道、桥/护栏） | 每段 0x100 频率；`stockFcw`；`onroadEvents` 里的 `fcw` | 0x100 全程约 10 Hz（尤其 openpilot 接管期间）；无危险时 `stockFcw` 从不为 True | 出现无理由报警 → 误报，记下路线和时间，`ToyotaRadarMode` 改回 0 |
+| 3 报警是否同源 | **关 Alpha Long**（原车 ACC），同样日常驾驶，等自然发生的原车 FCW | bus 0 的 0x411 `FCW`/0x283，对比 bus 1 的 0x100 `PCS_ALARM` | 原车 FCW 每次出现，bus 1 `PCS_ALARM` 同帧前后置 1，结束也一致 | 两者不一致 → 信号语义与 ars510 作者的记录不同，T2 不可信 |
+| 4 Alpha Long 下真实报警 | 回到 Alpha Long，靠自然发生（可能很久都没有） | 报警时刻：`stockFcw`=True、`onroadEvents` 有 `fcw`、`sendcan` src=0 地址 0x411 `FCW=1`、屏幕和仪表 | 四者同时出现，报警结束后 ≤0.5 s 清除 | 只有 `stockFcw` 没有提示 → 事件映射问题；有 `PCS_ALARM` 没 `stockFcw` → 解析/门控问题 |
+| 5 故障情况 | 自然遇到的雨雪遮挡、雷达报故障 | 0x196 故障位、`radarTempUnavailable`、`stockFcw` | 雷达故障/静默时报警不会卡住（0.5 s 内清除） | 卡住 → 过期逻辑问题 |
+
+**区分报警来源：** `fcw` 事件也可能来自视觉模型（`modelV2.meta.hardBrakePredicted`）或规划器（`longitudinalPlan.fcw`）。只有同一时刻 `carState.stockFcw=True` 的才是 T2 触发的。
+
+**第 3 步为什么有用：** 关 Alpha Long 时雷达照常工作，原车 FCW 在 bus 0 上可见，而 rlog 同时记录所有总线的原始 CAN（不依赖 T2 门控），所以可以离线核对"原车报警 = bus 1 `PCS_ALARM`"。这一步证明信号含义正确；第 1、2 步证明 Alpha Long 下信号还在；两者都成立，T2 才算可信。
+
+**关于 PCS 灵敏度：** 第 3 步若迟迟等不到自然报警，可考虑在车机里把 PCS 灵敏度调到"早"以增加自然触发的机会（[推断] 是否影响 Alpha Long 下 bus 1 的报警阈值未知）。仍然不要人为制造险情。
