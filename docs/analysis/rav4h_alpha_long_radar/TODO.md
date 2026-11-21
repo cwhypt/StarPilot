@@ -14,7 +14,7 @@
 | # | 任务 | 状态 | 风险 | 依据 |
 |---|------|------|------|------|
 | T1 | 合入 PR #230（ARS510 解析器更新） | **完成**（合并提交 `94fefd3f`，测试：test_ars510 502 通过、toyota 目录 825 通过；未上车） | 低 | 14 §2 P1 |
-| T2 | 2a：雷达 `PCS_ALARM` → StarPilot FCW 告警（只告警，不控车）。已查 #329 / ds-sebastian fork：无现成实现（20）。**commaai/opendbc#3860 提交 `dea4a6a` 有 carstate 部分**（PCS_ALARM→stockFcw，含 POWER_UP 首帧过滤），可参考但需移植，且仍需映射到带提示的 `fcw` 事件（22） | 待做 | 低 | 14 §2 P2a、§5 |
+| T2 | **（下一步）** 2a：雷达 `PCS_ALARM` → StarPilot FCW 告警（只告警，不控车）。已查 #329 / ds-sebastian fork：无现成实现（20）。**commaai/opendbc#3860 提交 `dea4a6a` 有 carstate 部分**（PCS_ALARM→stockFcw，含 POWER_UP 首帧过滤），可参考但需移植，且仍需映射到带提示的 `fcw` 事件（22） | 待做 | 低 | 14 §2 P2a、§5 |
 | T3 | 2b：雷达 `REQUIRED_DECEL` 兜底，**先只记录** | 待做 | 高（启用时） | 14 §2 P2b、§5 |
 | T4 | 只减不增的雷达 cap（ACC 目标），**先只记录** | 待做 | 中（启用时） | 04 方案 C、10 §3C、14 P3 |
 | T5 | radard 小修：读雷达 `aRel`；ARS510 测量去重 | 待做 | 低-中 | 02 §4、14 P4 |
@@ -30,6 +30,7 @@
 - 注意：上游维护者尚未 review；合入后若上游再改，需要同步。
 
 ### T2 雷达 FCW（2a）
+- **跨度与挂载点见 23 §2**（约 7-9 文件 / 150 行；不改数据结构：`card.py:299` 之后写 `CS.stockFcw`，`car_specific.py:134` Toyota 分支映射到 `EventName.fcw`）。
 - 输入：bus 1 `PCS_STATE`(0x100).`PCS_ALARM`，10 Hz；上电第一帧 `FF FF` 需忽略。
 - 输出：StarPilot FCW 告警（屏幕 + 声音）；在 `DISABLE_RADAR` 模式下同时驱动仪表 FCW 图标（`carcontroller.py:627-628` 的 `create_fcw_command`，目前只由 `hudControl.visualAlert == fcw` 触发）。
 - 数据通路需决定：在 Toyota `RadarInterface` 内解析后放进何处（`RadarData` 无此字段 → 扩展 schema 或放 `starpilotCarState`）。
@@ -44,6 +45,7 @@
 - 安全：上游标为 "theoretical / fork-only"，需要自己的安全评审；不得宣称等同原车 AEB。
 
 ### T4 只减不增的雷达 cap
+- **跨度与优缺点见 23 §3B**（约 5-6 文件 / 250 行；`plannerd.py:24` 加 `liveTracks` 订阅，`longitudinal_planner.py:3193` 前 `min`；不改数据结构；**可先用 rlog 离线回放验证，不上车**）。A（radard 独立前车）风险最高，放最后；C（REQUIRED_DECEL）要改 cereal，取决于 T2 上车结果。
 - 输入：Mode 1 ACC 目标的距离、相对速度、`REL_ACCEL`（T1 后可从 `aRel` 取）。
 - 公式草案：`a_cap = -(closing²)/(2·max(d - d_min, 1))`，限幅 [-2.5, 0]，`d_min` ≈ 跟车距离的 50%（下限 4 m）。
 - 位置：`longitudinal_planner.py` 末端对 `output_a_target` 取 min。
