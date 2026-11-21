@@ -64,3 +64,47 @@
 **第 3 步为什么有用：** 关 Alpha Long 时雷达照常工作，原车 FCW 在 bus 0 上可见，而 rlog 同时记录所有总线的原始 CAN（不依赖 T2 门控），所以可以离线核对"原车报警 = bus 1 `PCS_ALARM`"。这一步证明信号含义正确；第 1、2 步证明 Alpha Long 下信号还在；两者都成立，T2 才算可信。
 
 **关于 PCS 灵敏度：** 第 3 步若迟迟等不到自然报警，可考虑在车机里把 PCS 灵敏度调到"早"以增加自然触发的机会（[推断] 是否影响 Alpha Long 下 bus 1 的报警阈值未知）。仍然不要人为制造险情。
+
+## 7. 自动检查脚本：`tools/longitudinal/check_t2_radar_fcw.py`
+
+把 §6 的第 0–5 步自动化：给它日志，它逐步输出 PASS / FAIL / INFO / N/A，并列出每次 `fcw` 提示的来源。任何一步 FAIL 时退出码为 1。
+
+### 用法
+
+```bash
+# 设备上（SSH 进去）
+cd /data/openpilot
+python tools/longitudinal/check_t2_radar_fcw.py /data/media/0/realdata/<路线>--0/rlog.zst /data/media/0/realdata/<路线>--1/rlog.zst
+
+# 电脑上（openpilot 开发环境），整条路线或几段
+python tools/longitudinal/check_t2_radar_fcw.py "<dongle_id>|<路线>"
+python tools/longitudinal/check_t2_radar_fcw.py <rlog 路径> --json
+```
+
+- **必须用 rlog，不能用 qlog**：qlog 不含完整的 `can`/`sendcan`，第 1、3、4 步会全部变成"没有数据"。
+- 包含第 0 段（`--0`）：`carParams` 在路线开头，没有它第 0 步会 FAIL。只有从第 0 段开始才看得到上电首帧。
+
+### 每一步在日志里看什么
+
+| 步骤 | 检查项 | 数据来源 | 判定 |
+|---|---|---|---|
+| 0 | flags、雷达固件 | `carParams.flags`、`carFw`(fwdRadar) | 有 `ARS510_RADAR`+`DISABLE_RADAR` = PASS；只缺 `DISABLE_RADAR`（原车纵向/过滤器）= INFO，可用于第 3 步；固件不是 `8821F0R03100` = INFO |
+| 1 | 0x100 是否存在、频率、>0.5 s 断档、首帧、开机 10 s 内是否报警 | `can` src=1 地址 0x100；`carState.stockFcw` | 没有 0x100 = **FAIL（T2 在这台车上无效）**；频率不在 8–12 Hz = FAIL |
+| 2 | 雷达报警的时间列表；接管期间 0x100 频率 | 0x100 `PCS_ALARM`（排除首帧）；`selfdriveState.enabled` | 报警列为 INFO：**需要你按列出的时间看行车视频**，判断是不是误报 |
+| 3 | 原车 FCW 与雷达总线报警是否一一对应（±0.3 s） | bus 0 收到的 0x411 `FCW` vs bus 1 `PCS_ALARM` | 只在原车纵向的日志里有 0x411，Alpha Long 下为 N/A |
+| 4 | 每次雷达报警 → `stockFcw` → `fcw` 事件 → openpilot 发出 0x411 `FCW=1` | `carState`、`onroadEvents`、`sendcan` src=0 0x411 | 任何一环缺失 = FAIL，并指出是哪一环（解析/门控、事件映射、仪表图标、清除延迟） |
+| 5 | 雷达静默时报警是否卡住；故障次数 | `stockFcw` 与最近一帧 0x100 的间隔；0x196 `RADAR_FAULT`（连续 ≥2 帧）、`radarTempUnavailable` | 卡住 = FAIL；故障列为 INFO |
+| 来源 | 每次 `fcw` 提示来自雷达（T2）、视觉模型还是规划器 | `onroadEvents` 与 `stockFcw` / `modelV2.meta.hardBrakePredicted` / `longitudinalPlan.fcw` 的重叠 | 只有标"radar (T2)"的才是 T2 触发的 |
+
+### 推荐的使用顺序
+
+1. 装好后第一次开车：跑一次，重点看第 0、1 步。第 1 步 FAIL 就到此为止（T2 无效）。
+2. 之后每天或每次长途跑一次：看第 2 步列出的报警时刻是否都有真实风险，看第 4、5 步。
+3. 偶尔关 Alpha Long 开一段：跑第 3 步，核对信号含义。
+
+### 测试（离线，未用真实日志）
+
+- `tools/longitudinal/tests/test_check_t2_radar_fcw.py`：12 项。模拟日志里的 `stockFcw` 由**真实的** carstate 代码（`update_radar_pcs_alarm`）根据模拟的雷达帧算出，其余部分模拟。覆盖：正常一次报警全部 PASS、安静驾驶、没有 0x100、flags/固件不对、报警中途雷达掉线、报警卡住、事件映射或仪表图标缺失、开机 10 s 内报警、原车纵向下第 3 步通过与不通过、`fcw` 来源归属。
+- **变异检查**：故意去掉 carstate 的首帧过滤 → 3 项失败；去掉 0.5 s 超时 → 1 项失败；恢复后 12 项全过。说明脚本确实能抓到这两类实现错误。
+- 命令行入口：用模拟的 rlog 文件经 `LogReader` 跑通，正常日志退出码 0、没有 0x100 的日志退出码 1，`--json` 正常。
+- 局限：没有真实 RAV4 日志，第 3 步的 ±0.3 s、频率 8–12 Hz 等阈值是按设计值定的，拿到真实日志后可能要调。

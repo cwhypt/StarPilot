@@ -44,7 +44,7 @@
 | 21 | [21_mode1_capabilities_and_pr230_contents.md](21_mode1_capabilities_and_pr230_contents.md) | 开 Alpha Long + ToyotaRadarMode=1 能做/不能做；#230 具体改了什么 | 完成 |
 | 22 | [22_commaai_opendbc_pr3860.md](22_commaai_opendbc_pr3860.md) | commaai/opendbc#3860：官方 PR，已含 PCS_ALARM→stockFcw（T2 的 carstate 部分）；附 #230 状态勘误 | 完成 |
 | 23 | [23_gap_fix_options_compared.md](23_gap_fix_options_compared.md) | 视觉漏看缺口：T2 与 A/B/C 三种修复的代码跨度、优缺点、顺序 | 完成 |
-| 24 | [24_t2_radar_pcs_fcw_implementation.md](24_t2_radar_pcs_fcw_implementation.md) | **T2 实现**：雷达总线 PCS_ALARM → stockFcw → 会弹提示的 fcw；改动、门控、测试、上车验证步骤 | 代码完成，离线测试通过，未上车 |
+| 24 | [24_t2_radar_pcs_fcw_implementation.md](24_t2_radar_pcs_fcw_implementation.md) | **T2 实现**：雷达总线 PCS_ALARM → stockFcw → 会弹提示的 fcw；改动、门控、测试、上车验证步骤、自动检查脚本 `tools/longitudinal/check_t2_radar_fcw.py`（§7） | 代码完成，离线测试通过，未上车 |
 
 > 05 对 01/04 有修正，并含一条**后续更正**：无过滤器时 stock ACCEL_CMD 取不到，但据上游 ars510-radar，雷达在 bus 1 上的目标数据在 UDS 禁用后仍存在（纯软件即可读），所以"自己重建的只减不增制动 cap"（04 方案 C）无需额外硬件；直接 min(stock ACCEL_CMD) 才需要过滤器。
 
