@@ -47,6 +47,7 @@
 | 24 | [24_t2_radar_pcs_fcw_implementation.md](24_t2_radar_pcs_fcw_implementation.md) | **T2 实现**：雷达总线 PCS_ALARM → stockFcw → 会弹提示的 fcw；改动、门控、测试、上车验证步骤、自动检查脚本 `tools/longitudinal/check_t2_radar_fcw.py`（§7） | 代码完成，离线测试通过，未上车 |
 | 25 | [25_b_radar_brake_cap_offline.md](25_b_radar_brake_cap_offline.md) | **B（T4）第一阶段**：只减不增雷达 cap 的纯函数 + rlog 回放脚本（片段分类：视觉漏看/锁错车/同一前车），接入规划器的门槛 | 完成（未接入、未用真实日志） |
 | 26 | [26_b_cut_in_coverage_and_c_probe.md](26_b_cut_in_coverage_and_c_probe.md) | B 对切入/部分重叠/横穿的覆盖（部分覆盖，T4b 扩展方向）；C 的离线探测脚本 `probe_required_decel.py` | 完成（未用真实日志） |
+| 27 | [27_install_on_device.md](27_install_on_device.md) | 在 comma 设备上安装本分支：先装官方 StarPilot，再 SSH 切换 origin/分支；开机设置、验证、驾驶顺序、回退 | 完成（未在设备上走过） |
 
 > 05 对 01/04 有修正，并含一条**后续更正**：无过滤器时 stock ACCEL_CMD 取不到，但据上游 ars510-radar，雷达在 bus 1 上的目标数据在 UDS 禁用后仍存在（纯软件即可读），所以"自己重建的只减不增制动 cap"（04 方案 C）无需额外硬件；直接 min(stock ACCEL_CMD) 才需要过滤器。
 
