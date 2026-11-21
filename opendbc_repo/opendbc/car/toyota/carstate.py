@@ -11,6 +11,14 @@ from opendbc.car.toyota.values import ToyotaFlags, ToyotaStarPilotFlags, CAR, DB
                                                   SECOC_CAR, LEGACY_PRIUS_CAR
 from opendbc.safety import ALTERNATIVE_EXPERIENCE
 
+ARS510_DBC = "toyota_tss2_ars510"
+PCS_STATE_TIMEOUT_FRAMES = 50  # PCS_STATE is 10 Hz; drop a held alarm after 0.5 s without a frame
+
+
+def radar_pcs_fcw(CP) -> bool:
+  # Alpha Long silences the radar's car-bus FCW (PCS_HUD); ARS510 cars still report PCS_ALARM on the radar bus.
+  return bool(CP.flags & ToyotaFlags.ARS510_RADAR.value and CP.flags & ToyotaFlags.DISABLE_RADAR.value)
+
 ButtonType = structs.CarState.ButtonEvent.Type
 SteerControlType = structs.CarParams.SteerControlType
 
@@ -79,6 +87,8 @@ class CarState(CarStateBase):
     self.pcm_acc_status = 0
 
     self.acc_type = 1
+    self.radar_pcs_alarm = False
+    self.radar_pcs_age = PCS_STATE_TIMEOUT_FRAMES
     self.lkas_hud = {}
     self.gvc = 0.0
     self.secoc_synchronization = None
@@ -204,6 +214,9 @@ class CarState(CarStateBase):
         self.acc_type = cp_acc.vl["ACC_CONTROL"]["ACC_TYPE"]
       ret.stockFcw = bool(cp_acc.vl["PCS_HUD"]["FCW"])
 
+    if Bus.radar in can_parsers:
+      ret.stockFcw = ret.stockFcw or self.update_radar_pcs_alarm(can_parsers[Bus.radar])
+
     # some TSS2 cars have low speed lockout permanently set, so ignore on those cars
     # these cars are identified by an ACC_TYPE value of 2.
     # TODO: it is possible to avoid the lockout and gain stop and go if you
@@ -300,6 +313,18 @@ class CarState(CarStateBase):
 
     return ret, fp_ret
 
+  def update_radar_pcs_alarm(self, cp_radar) -> bool:
+    alarms = cp_radar.vl_all["PCS_STATE"]["PCS_ALARM"]
+    power_up = cp_radar.vl_all["PCS_STATE"]["POWER_UP"]
+    if alarms:
+      self.radar_pcs_age = 0
+      self.radar_pcs_alarm = any(a and not p for a, p in zip(alarms, power_up, strict=True))
+    else:
+      self.radar_pcs_age = min(self.radar_pcs_age + 1, PCS_STATE_TIMEOUT_FRAMES)
+      if self.radar_pcs_age >= PCS_STATE_TIMEOUT_FRAMES:
+        self.radar_pcs_alarm = False
+    return self.radar_pcs_alarm
+
   @staticmethod
   def get_can_parsers(CP):
     pt_messages = [
@@ -322,7 +347,11 @@ class CarState(CarStateBase):
         getattr(CP, "alternativeExperience", 0) & ALTERNATIVE_EXPERIENCE.ALLOW_AEB):
       cam_messages.append(("PRE_COLLISION_2", 50))
 
-    return {
+    parsers = {
       Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], pt_messages, 0),
       Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], cam_messages, 2),
     }
+    if radar_pcs_fcw(CP):
+      # optional (nan): a missing radar bus never makes CAN invalid, it only leaves the alarm off
+      parsers[Bus.radar] = CANParser(ARS510_DBC, [("PCS_STATE", float('nan'))], 1)
+    return parsers

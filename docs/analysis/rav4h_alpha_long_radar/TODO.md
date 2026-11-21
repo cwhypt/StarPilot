@@ -14,7 +14,7 @@
 | # | 任务 | 状态 | 风险 | 依据 |
 |---|------|------|------|------|
 | T1 | 合入 PR #230（ARS510 解析器更新） | **完成**（合并提交 `94fefd3f`，测试：test_ars510 502 通过、toyota 目录 825 通过；未上车） | 低 | 14 §2 P1 |
-| T2 | **（下一步）** 2a：雷达 `PCS_ALARM` → StarPilot FCW 告警（只告警，不控车）。已查 #329 / ds-sebastian fork：无现成实现（20）。**commaai/opendbc#3860 提交 `dea4a6a` 有 carstate 部分**（PCS_ALARM→stockFcw，含 POWER_UP 首帧过滤），可参考但需移植，且仍需映射到带提示的 `fcw` 事件（22） | 待做 | 低 | 14 §2 P2a、§5 |
+| T2 | 2a：雷达 `PCS_ALARM` → StarPilot FCW 告警（只告警，不控车）。照 commaai/opendbc#3860 在 carstate 读 bus 1 `PCS_STATE`（含 POWER_UP 首帧过滤）→ `stockFcw` → `EventName.fcw`；门控 `ARS510_RADAR`+`DISABLE_RADAR`（24） | **代码完成，未上车**（待 V2/V3） | 低 | 24 |
 | T3 | 2b：雷达 `REQUIRED_DECEL` 兜底，**先只记录** | 待做 | 高（启用时） | 14 §2 P2b、§5 |
 | T4 | 只减不增的雷达 cap（ACC 目标），**先只记录** | 待做 | 中（启用时） | 04 方案 C、10 §3C、14 P3 |
 | T5 | radard 小修：读雷达 `aRel`；ARS510 测量去重 | 待做 | 低-中 | 02 §4、14 P4 |
@@ -29,7 +29,7 @@
 - 验收：`pytest opendbc_repo/opendbc/car/toyota/tests/test_ars510.py` 与 `starpilot/system/the_galaxy/tests/test_device_settings_layout.py` 通过；`THIRD_PARTY_NOTICES.md` 基准提交更新为 `7ff9485`。
 - 注意：上游维护者尚未 review；合入后若上游再改，需要同步。
 
-### T2 雷达 FCW（2a）
+### T2 雷达 FCW（2a）— 已实现，见 24（下面是实现前的计划，保留备查；实际放在 carstate 而非 card.py，未另加开关）
 - **跨度与挂载点见 23 §2**（约 7-9 文件 / 150 行；不改数据结构：`card.py:299` 之后写 `CS.stockFcw`，`car_specific.py:134` Toyota 分支映射到 `EventName.fcw`）。
 - 输入：bus 1 `PCS_STATE`(0x100).`PCS_ALARM`，10 Hz；上电第一帧 `FF FF` 需忽略。
 - 输出：StarPilot FCW 告警（屏幕 + 声音）；在 `DISABLE_RADAR` 模式下同时驱动仪表 FCW 图标（`carcontroller.py:627-628` 的 `create_fcw_command`，目前只由 `hudControl.visualAlert == fcw` 触发）。

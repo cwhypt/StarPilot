@@ -56,3 +56,21 @@ def test_kia_ray_ev_allows_stock_cruise_to_enable_controls():
 
     assert captured["pcm_enable"] is True
     assert captured["ignore_cruise_state"] is ignore_cruise_state
+
+
+def test_toyota_ars510_radar_pcs_alarm_raises_the_audible_fcw():
+  from opendbc.car.toyota.values import CAR as TOYOTA_CAR, ToyotaFlags
+  from openpilot.selfdrive.selfdrived.events import EventName, Events
+
+  ars510 = ToyotaFlags.ARS510_RADAR.value
+  disabled = ToyotaFlags.DISABLE_RADAR.value
+  for flags, stock_fcw, expected in ((ars510 | disabled, True, True),
+                                     (ars510 | disabled, False, False),
+                                     (disabled, True, False),   # radar mode off: stockFcw cannot come from the radar bus
+                                     (ars510, True, False)):    # radar not disabled: the car's own FCW is already on the dash
+    cp = car.CarParams.new_message(brand="toyota", carFingerprint=TOYOTA_CAR.TOYOTA_RAV4_TSS2_2023, flags=flags,
+                                   openpilotLongitudinalControl=False)
+    handler = CarSpecificEvents(cp)
+    handler.create_common_events = lambda *args, **kwargs: Events()
+    events = handler.update(SimpleNamespace(stockFcw=stock_fcw), SimpleNamespace(), SimpleNamespace())
+    assert (EventName.fcw in events.names) is expected

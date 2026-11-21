@@ -6,6 +6,7 @@ from opendbc.car.gm.values import CAR as GM_CAR, GMFlags, SDGM_CAR
 from opendbc.car.hyundai.values import CAR as HYUNDAI_CAR
 from opendbc.car.interfaces import MAX_CTRL_SPEED
 from opendbc.car.rivian.values import RivianFlags
+from opendbc.car.toyota.carstate import radar_pcs_fcw
 
 from openpilot.selfdrive.selfdrived.events import Events
 
@@ -147,6 +148,11 @@ class CarSpecificEvents:
           if CS.vEgo < 0.001:
             # while in standstill, send a user alert
             events.add(EventName.manualRestart)
+
+      # Alpha Long silences the radar's car-bus FCW; the ARS510 radar-bus PCS alarm is read into stockFcw instead.
+      # stockFcw has no alert of its own, so raise the audible fcw alert (which also lights the dash FCW icon).
+      if CS.stockFcw and radar_pcs_fcw(self.CP):
+        events.add(EventName.fcw)
 
     elif self.CP.brand == 'gm':
       events = self.create_common_events(CS, CS_prev, extra_gears=extra_gears, pcm_enable=self.CP.pcmCruise,
