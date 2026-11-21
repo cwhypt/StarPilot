@@ -16,7 +16,7 @@
 | T1 | 合入 PR #230（ARS510 解析器更新） | **完成**（合并提交 `94fefd3f`，测试：test_ars510 502 通过、toyota 目录 825 通过；未上车） | 低 | 14 §2 P1 |
 | T2 | 2a：雷达 `PCS_ALARM` → StarPilot FCW 告警（只告警，不控车）。照 commaai/opendbc#3860 在 carstate 读 bus 1 `PCS_STATE`（含 POWER_UP 首帧过滤）→ `stockFcw` → `EventName.fcw`；门控 `ARS510_RADAR`+`DISABLE_RADAR`（24） | **代码完成，未上车**（待 V2/V3） | 低 | 24 |
 | T3 | 2b：雷达 `REQUIRED_DECEL` 兜底，**先只记录** | 待做 | 高（启用时） | 14 §2 P2b、§5 |
-| T4 | 只减不增的雷达 cap（ACC 目标），**先只记录** | 待做 | 中（启用时） | 04 方案 C、10 §3C、14 P3 |
+| T4 | 只减不增的雷达 cap（ACC 目标，即 23 的方案 B）。第一阶段：纯函数 `radar_brake_cap.py` + 回放脚本 `tools/longitudinal/replay_radar_brake_cap.py`（25）；第二阶段接入规划器，门槛见 25 §7 | **第一阶段完成**（未接入、未用真实日志） | 中（启用时） | 25、23 §3B、04 方案 C |
 | T5 | radard 小修：读雷达 `aRel`；ARS510 测量去重 | 待做 | 低-中 | 02 §4、14 P4 |
 | T6 | radard 视觉门限对 ARS510 ACC 目标放宽 / 允许独立 lead | 阻塞（需回放数据） | 中 | 02、04 方案 A/B |
 | T9 | 若改用 `testing`：必须合并 PR #329（否则 Alpha Long 无过滤器时 ARS510 接收器被清掉，回到只用视觉）；`stable` 无此问题（20） | 搁置 | — | 20 |
