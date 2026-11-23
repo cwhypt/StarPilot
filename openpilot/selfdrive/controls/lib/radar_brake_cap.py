@@ -44,6 +44,14 @@ class CapResult:
   required: float = math.nan     # unclamped required accel
 
 
+def measured(pt) -> bool:
+  """RadarPoint.measured; StarPilot 7.0 moved it to deprecated.measured."""
+  try:
+    return bool(pt.measured)
+  except Exception:  # pycapnp: no such field
+    return bool(pt.deprecated.measured)
+
+
 def required_accel(d_rel: float, closing: float, v_ego: float, p: RadarCapParams) -> float:
   """Constant ego accel (lead at constant speed) that brings the closing speed to 0 at the margin behind the target."""
   margin = max(p.min_margin, p.t_margin * max(v_ego, 0.0))
@@ -65,7 +73,7 @@ class RadarBrakeCap:
     self.seen_moving = False
 
   def update(self, t: float, points, v_ego: float, unavailable: bool = False) -> CapResult:
-    """t: seconds; points: liveTracks points (trackId, dRel, yRel, vRel); v_ego: m/s; unavailable: liveTracks errors set."""
+    """t: seconds; points: radarTracks (formerly liveTracks) points (trackId, dRel, yRel, vRel); v_ego: m/s; unavailable: liveTracks errors set."""
     p = self.p
     if unavailable:
       self.reset()
@@ -73,7 +81,7 @@ class RadarBrakeCap:
     if self.last_t is not None and t - self.last_t > p.stale_s:
       self.reset()
 
-    acc = [pt for pt in points if pt.trackId < SUMMARY_TRACK_ID_MIN and pt.measured]
+    acc = [pt for pt in points if pt.trackId < SUMMARY_TRACK_ID_MIN and measured(pt)]
     if not acc:
       self.reset()
       return CapResult(None, "no ACC target")
@@ -108,3 +116,37 @@ class RadarBrakeCap:
         res.cap = max(p.cap_min, res.required)
         res.reason = "cap"
     return res
+
+
+class CapEpisodeLog:
+  """Log-only (on-car): groups consecutive radar cycles where the cap is active into one episode summary.
+
+  Records whether radard's leadOne was present and radar-matched during the episode, so a qlog shows the case B exists
+  for (radar closing on a target the vision lead missed) without touching the planner. update() returns the summary dict
+  when an episode ends (else None).
+  """
+  def __init__(self):
+    self.ep: dict | None = None
+
+  def update(self, t: float, res: CapResult, v_ego: float, lead_present: bool, lead_radar: bool) -> dict | None:
+    if res.cap is not None:
+      if self.ep is None:
+        self.ep = {"t_start": t, "v_ego_start": v_ego, "track_id": res.track_id, "min_cap": res.cap, "min_d_rel": res.d_rel,
+                   "max_closing": -res.v_rel, "cycles": 0, "vision_lead_cycles": 0, "radar_lead_cycles": 0}
+      ep = self.ep
+      ep["cycles"] += 1
+      ep["t_end"] = t
+      ep["min_cap"] = min(ep["min_cap"], res.cap)
+      ep["min_d_rel"] = min(ep["min_d_rel"], res.d_rel)
+      ep["max_closing"] = max(ep["max_closing"], -res.v_rel)
+      ep["vision_lead_cycles"] += int(lead_present)
+      ep["radar_lead_cycles"] += int(lead_present and lead_radar)
+      return None
+    if self.ep is None:
+      return None
+    ep, self.ep = self.ep, None
+    duration = ep.pop("t_end") - ep.pop("t_start")
+    out = {"event": "radar_brake_cap", "duration_s": round(duration, 2), "end_reason": res.reason}
+    out.update({k: (round(v, 3) if isinstance(v, float) else v) for k, v in ep.items()})
+    out["vision_missed"] = ep["vision_lead_cycles"] == 0
+    return out

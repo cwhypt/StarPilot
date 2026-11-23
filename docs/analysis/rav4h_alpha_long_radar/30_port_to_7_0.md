@@ -25,6 +25,11 @@
 | `selfdrive/controls/lib/radar_brake_cap.py` + `tools/longitudinal/{replay_radar_brake_cap,probe_required_decel,check_t2_radar_fcw}.py` | B/C 离线工具，路径改为 `openpilot.` 前缀；**B 仍未接入规划器**（与旧分支一致） |
 | `selfdrive/controls/radard.py` | T5 的去重部分：`RadarD(dedupe_radar=...)`，仅 Toyota + `ARS510_RADAR` 时由 `main` 打开。ARS510 约 16 Hz、radard 按 `modelV2` 20 Hz 轮询，约每 5 次有 1 次读到同一条 `radarTracks`，原先会被卡尔曼滤波用两次；现在同一条记录只喂一次（新轨迹首次出现除外）。其他车型逐位不变 |
 | `longitudinal_mpc_lib/long_mpc.py`、`longitudinal_planner.py` | 雷达确认的前车也能触发规划器 FCW（仅 `radar_pcs_fcw`：Toyota + ARS510 + Alpha Long，默认关）。原先 MPC 的 `crash_cnt` 只在视觉置信度 `modelProb > 0.9` 时累加；现在该条件放宽为「> 0.9，或 radard 已把雷达轨迹与视觉前车匹配（`radar=True`，`modelProb > 0.5`）」。置信度 ≤ 0.9 的新路径额外要求 TTC < 4 s 且接近速度 ≥ 0.5 m/s；> 0.9 的原路径不变。**只改 StarPilot 规划器**，`starpilot/longitudinal/upstream/` 的备用规划器没动 |
+| `cereal/log.capnp`、`car/car.capnp`（末尾追加，运行时加载、无需重编、与旧日志兼容） | `EventName.radarNoData`；`CarState.radarBusSilent` |
+| `car/toyota/carstate.py` | 雷达私有总线 15 s 无任何帧（PCS_STATE / ACC_TARGET_3 / EVENT_OBJECT / EVENT_STATE）→ `radarBusSilent`；转换时 `carlog.error` 记一行。**只记录**：每次雷达短 TTC 事件（0x195/0x196 激活）结束时记一行摘要（时长、起始车速、最小 `REQUIRED_DECEL`、最近距离） |
+| `selfdrive/car/car_events.py` | `radarBusSilent` 且已开启本选项 → `radarNoData` 提示（"Radar Data Not Received / Radar FCW off; driving vision-only"），**每次开车只显示一次、10 s，不退出** |
+| `selfdrive/controls/radard.py` + `radar_brake_cap.py`（`CapEpisodeLog`） | **只记录**：ARS510 车上每个雷达周期跑 B cap；cap 生效的一段连续周期结束时记一行摘要（最小 cap、最近距离、最大接近速度、期间 leadOne 是否存在/是否雷达匹配、`vision_missed`）。不进规划器 |
+| `tools/longitudinal/*`、`radar_brake_cap.measured()` | 修正：7.0 的日志里雷达点在 `radarTracks`（不再是 `liveTracks`），`measured` 在 `deprecated` 下，`leadOne.status` 改名 `present`。之前移植的工具在 7.0 日志上会找不到雷达点，现在两种都认 |
 | 测试 | `test_ars510_pcs_fcw.py`（新，按 7.0 的 `VehicleStartupPreferences` 流程构造参数）；`test_ars510.py` 增加校验字节、故障位、LAT_DIST 回绕用例；`test_radard_dedupe.py`、`test_radar_confirmed_fcw.py`（新） |
 
 ## 3. 旧分支有而 7.0 没有的 RAV4 相关项（按代码核对）
@@ -41,7 +46,15 @@
 
 7.0 有而旧分支没有：2025 RAV4 雷达 CAN 过滤器识别、0.11.3 基线、新驾驶模型等（见 28）。
 
-## 4. 已知限制
+## 4. 车上日志怎么看
+
+`carlog.error` / `cloudlog.error` 进入 `errorLogMessage`，这个服务保存在 **qlog** 里（随 qlog 自动上传）；普通 `cloudlog.info` 只在 rlog。用 error 级别只是为了进 qlog，不代表出错。三类记录：
+
+- `{"event": "ars510_radar_bus", "silent": true/false, ...}`：雷达私有总线停/恢复
+- `{"event": "ars510_required_decel", ...}`：一次雷达短 TTC 事件
+- `{"event": "radar_brake_cap", ..., "vision_missed": true/false}`：B cap 会生效的一段；`vision_missed=true` 就是 B 要补的缺口
+
+## 5. 已知限制
 
 - **radard 的 `aRel` 没做**：Mode 1 的点不带 `aRel`（NaN），要用就得改成读雷达 REL_ACCEL 并换算成前车加速度，会改变跟车行为，没有回放数据先不动。
 
@@ -49,7 +62,7 @@
 - **V2 未回答**：Alpha Long 下雷达私有总线（0x100/0x196/0x235…）是否还在发，仍需上车看 `check_t2_radar_fcw.py` / `probe_required_decel.py`。不在发时：ACC 目标静默退化成纯视觉，T2 永不触发（不报错）。
 - T2 只告警不刹车；PCS_ALARM 语义来自 ars510 作者记录，待实车验证。
 
-## 5. 设备上验证
+## 6. 设备上验证
 
 ```
 cd /data/openpilot_rav4          # 官方 7.0 副本 + 本补丁

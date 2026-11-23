@@ -98,3 +98,32 @@ def test_bounds_and_monotonic(d, closing, v_ego):
   base = res.cap if res.cap is not None else 0.0
   for other in others:
     assert (other.cap if other.cap is not None else 0.0) <= base + 1e-9
+
+
+def test_measured_reads_the_7_0_deprecated_field():
+  from opendbc.car.structs import car
+  from openpilot.selfdrive.controls.lib.radar_brake_cap import measured
+  rd = car.RadarData.new_message()
+  p = rd.init("points", 1)[0]
+  p.deprecated.measured = True
+  assert measured(p) and measured(SimpleNamespace(measured=True)) and not measured(SimpleNamespace(measured=False))
+
+
+def test_cap_episode_log_summarises_one_episode():
+  from openpilot.selfdrive.controls.lib.radar_brake_cap import CapEpisodeLog, CapResult
+  log = CapEpisodeLog()
+  assert log.update(0.0, CapResult(None, "no ACC target"), 20., False, False) is None
+  for i, (cap, d) in enumerate([(-0.5, 40.), (-1.2, 35.), (-0.8, 31.)]):
+    assert log.update(0.06 * (i + 1), CapResult(cap, "cap", 3, d, -6.), 20., False, False) is None
+  out = log.update(0.3, CapResult(None, "not closing", 3, 30., 0.), 20., False, False)
+  assert out["event"] == "radar_brake_cap" and out["cycles"] == 3 and out["min_cap"] == -1.2 and out["min_d_rel"] == 31.
+  assert out["vision_missed"] and out["max_closing"] == 6. and out["end_reason"] == "not closing"
+  assert log.update(0.4, CapResult(None, "no ACC target"), 20., False, False) is None
+
+
+def test_cap_episode_log_marks_episodes_the_vision_lead_covered():
+  from openpilot.selfdrive.controls.lib.radar_brake_cap import CapEpisodeLog, CapResult
+  log = CapEpisodeLog()
+  log.update(0.0, CapResult(-1.0, "cap", 3, 30., -5.), 20., True, True)
+  out = log.update(0.1, CapResult(None, "no ACC target"), 20., False, False)
+  assert not out["vision_missed"] and out["radar_lead_cycles"] == 1

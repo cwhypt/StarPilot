@@ -1,6 +1,6 @@
 import pytest
 
-from cereal import log
+from openpilot.cereal import log
 from opendbc.can import CANPacker
 
 from openpilot.tools.longitudinal.probe_required_decel import SIG, probe, report, value

@@ -204,6 +204,7 @@ struct CarState {
   lowSpeedAlert @56 :Bool;  # lost steering control due to a dynamic min steering speed
   blockPcmEnable @60 :Bool;  # whether to allow PCM to enable this frame
   carNotReady @61 :Bool;  # car is transiently refusing engagement, used to prevent a fault if engaged
+  radarBusSilent @62 :Bool;  # Toyota ARS510 + Alpha Long opt-in: no frame on the radar's private bus for a while
 
   # cruise state
   cruiseState @10 :CruiseState;

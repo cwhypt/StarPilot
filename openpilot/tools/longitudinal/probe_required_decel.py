@@ -143,9 +143,9 @@ def probe(msgs) -> Result:
     elif which == "longitudinalPlan":
       a_target = m.longitudinalPlan.aTarget
     elif which == "radarState":
-      lead = m.radarState.leadOne.status
-    elif which == "liveTracks":
-      lt = m.liveTracks
+      lead = m.radarState.leadOne.present
+    elif which in ("radarTracks", "liveTracks"):  # 7.0 renamed liveTracks to radarTracks
+      lt = getattr(m, which)
       b_cap = b.update(t, lt.points, v_ego, not m.valid or any(lt.errors.to_dict().values())).cap
     elif which == "can":
       for f in m.can:

@@ -1,8 +1,7 @@
-from types import SimpleNamespace
-
-from cereal import custom, log
+from openpilot.cereal import log
 from opendbc.can import CANPacker
 from opendbc.car import Bus, gen_empty_fingerprint
+from opendbc.car.toyota.ars510_preferences import configure_radar
 from opendbc.car.toyota.interface import CarInterface
 from opendbc.car.toyota.values import CAR
 
@@ -30,10 +29,10 @@ def can_event(t, which, frames):
 def drive(seconds=30.0, alarm=(), flags=FLAGS_T2, fw="8821F0R03100", radar_until=None, stock_fcw=False,
           map_event=True, send_dash=True, model_fcw=(), force_stock_fcw=None, power_up=True):
   """A synthetic route: the real carstate turns the radar-bus frames into stockFcw; the rest of the stack is simulated."""
-  CP = CarInterface.get_params(CAR.TOYOTA_RAV4_TSS2_2023, gen_empty_fingerprint(), [], True, False, False,
-                               SimpleNamespace(toyota_radar_mode_requested=1))
-  CS = CarInterface(CP, custom.StarPilotCarParams.new_message()).CS
-  cp_radar = CarInterface(CP, custom.StarPilotCarParams.new_message()).can_parsers[Bus.radar]
+  CP = CarInterface.get_params(CAR.TOYOTA_RAV4_TSS2_2023, gen_empty_fingerprint(), [], True, False, False)
+  configure_radar(CP, alpha_long_radar=True)  # what ToyotaRadarMode=1 does at startup (VehicleStartupPreferences)
+  CI = CarInterface(CP)
+  CS, cp_radar = CI.CS, CI.can_parsers[Bus.radar]
   in_alarm = lambda t: any(s <= t < e for s, e in alarm)  # noqa: E731
 
   m = log.Event.new_message(logMonoTime=0)

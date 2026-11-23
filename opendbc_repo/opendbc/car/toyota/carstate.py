@@ -16,6 +16,7 @@ from opendbc.car.toyota.prius_longitudinal import configured as prius_filter_con
 from opendbc.car.toyota.rav4h_filter import Rav4hCANParser, configured as rav4h_filter_configured
 from opendbc.car.toyota.values import ToyotaFlags, CAR, DBC, STEER_THRESHOLD, EPS_SCALE, uses_toyota_auto_hold_aeb
 from opendbc.car.toyota.ars510_preferences import radar_pcs_fcw
+from opendbc.car.carlog import carlog
 
 ButtonType = structs.CarState.ButtonEvent.Type
 SteerControlType = structs.CarParams.SteerControlType
@@ -34,6 +35,9 @@ PERM_STEER_FAULTS = (3, 17)
 
 ARS510_DBC = "toyota_tss2_ars510"
 PCS_STATE_TIMEOUT_FRAMES = 50  # PCS_STATE is 10 Hz; drop a held alarm after 0.5 s without a frame
+# carstate runs at 100 Hz. The radar takes several seconds to boot, so only call the bus silent after 15 s without a frame.
+RADAR_SILENT_FRAMES = 1500
+RADAR_BUS_MESSAGES = ("PCS_STATE", "ACC_TARGET_3", "EVENT_OBJECT", "EVENT_STATE")
 
 
 class CarState(CarStateBase):
@@ -41,6 +45,9 @@ class CarState(CarStateBase):
     super().__init__(CP)
     self.radar_pcs_alarm = False
     self.radar_pcs_age = PCS_STATE_TIMEOUT_FRAMES
+    self.radar_silent_frames = 0
+    self.radar_frames_seen = 0
+    self.required_decel_event = None  # dict while the radar's short-TTC event is active
     can_define = CANDefine(DBC[CP.carFingerprint][Bus.pt])
     original_prius = prius_sdsu.configured(CP) or prius_advert_filter.configured(CP)
     self.eps_torque_scale = ((CP.safetyConfigs[0].safetyParam & 0xFF) / 100. if prius_advert_filter.configured(CP) else
@@ -213,7 +220,10 @@ class CarState(CarStateBase):
       ret.stockFcw = bool(cp_acc.vl["PCS_HUD"]["FCW"])
 
     if Bus.radar in can_parsers:
-      ret.stockFcw = ret.stockFcw or self.update_radar_pcs_alarm(can_parsers[Bus.radar])
+      cp_radar = can_parsers[Bus.radar]
+      ret.stockFcw = ret.stockFcw or self.update_radar_pcs_alarm(cp_radar)
+      ret.radarBusSilent = self.update_radar_bus_silence(cp_radar)
+      self.update_required_decel_log(cp_radar, ret.vEgo)
 
     # some TSS2 cars have low speed lockout permanently set, so ignore on those cars
     # these cars are identified by an ACC_TYPE value of 2.
@@ -346,6 +356,51 @@ class CarState(CarStateBase):
       self.dashboard_limit.update(timestamp, status, value_mps, valid_until_ns=expiry)
     return ret
 
+  def update_radar_bus_silence(self, cp_radar) -> bool:
+    """True after RADAR_SILENT_FRAMES without any radar-bus frame: the ARS510 receiver and T2 then have nothing to work with."""
+    was_silent = self.radar_silent_frames >= RADAR_SILENT_FRAMES
+    if any(len(cp_radar.vl_all[msg][sig]) for msg, sig in zip(RADAR_BUS_MESSAGES, ("PCS_ALARM", "TIMESTAMP", "OBJECT_DIST", "REQUIRED_DECEL"),
+                                                                strict=True)):
+      self.radar_silent_frames = 0
+      self.radar_frames_seen += 1
+    else:
+      self.radar_silent_frames = min(self.radar_silent_frames + 1, RADAR_SILENT_FRAMES)
+    silent = self.radar_silent_frames >= RADAR_SILENT_FRAMES
+    if silent != was_silent:
+      # error level reaches errorLogMessage, which is kept in qlogs (uploaded automatically)
+      carlog.error({"event": "ars510_radar_bus", "silent": silent, "frames_seen_before": self.radar_frames_seen})
+    return silent
+
+  def update_required_decel_log(self, cp_radar, v_ego: float) -> None:
+    """Log-only (TODO T3): one summary line per radar short-TTC event, so qlogs show what REQUIRED_DECEL would have asked for."""
+    dists = cp_radar.vl_all["EVENT_OBJECT"]["OBJECT_DIST"]
+    reqs = cp_radar.vl_all["EVENT_STATE"]["REQUIRED_DECEL"]
+    if not dists and not reqs:
+      ev = self.required_decel_event
+      if ev is not None:
+        ev["stale"] += 1
+        if ev["stale"] > 50:  # 0.5 s with no 0x195/0x196 frame: close it
+          self._close_required_decel_event()
+      return
+    active = any(d > 0 for d in dists) or any(r != 0 for r in reqs)
+    ev = self.required_decel_event
+    if active:
+      if ev is None:
+        ev = self.required_decel_event = {"frames": 0, "stale": 0, "v_ego_start": round(v_ego, 2), "min_required_decel": 0.0,
+                                          "min_object_dist": float("inf")}
+      ev["frames"] += 1
+      ev["stale"] = 0
+      ev["min_required_decel"] = min([ev["min_required_decel"], *reqs])
+      ev["min_object_dist"] = min([ev["min_object_dist"], *(d for d in dists if d > 0)])
+    elif ev is not None:
+      self._close_required_decel_event()
+
+  def _close_required_decel_event(self) -> None:
+    ev, self.required_decel_event = self.required_decel_event, None
+    carlog.error({"event": "ars510_required_decel", "duration_s": round(ev["frames"] / 100, 2), "v_ego_start": ev["v_ego_start"],
+                  "min_required_decel": round(ev["min_required_decel"], 3),
+                  "min_object_dist": round(ev["min_object_dist"], 2) if ev["min_object_dist"] != float("inf") else None})
+
   def update_radar_pcs_alarm(self, cp_radar) -> bool:
     alarms = cp_radar.vl_all["PCS_STATE"]["PCS_ALARM"]
     power_up = cp_radar.vl_all["PCS_STATE"]["POWER_UP"]
@@ -420,5 +475,5 @@ class CarState(CarStateBase):
     }
     if radar_pcs_fcw(CP):
       # optional (nan): a missing radar bus never makes CAN invalid, it only leaves the alarm off
-      parsers[Bus.radar] = CANParser(ARS510_DBC, [("PCS_STATE", float('nan'))], 1)
+      parsers[Bus.radar] = CANParser(ARS510_DBC, [(msg, float('nan')) for msg in RADAR_BUS_MESSAGES], 1)
     return parsers

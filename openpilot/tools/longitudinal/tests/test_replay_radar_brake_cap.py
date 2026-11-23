@@ -1,6 +1,6 @@
 import pytest
 
-from cereal import log
+from openpilot.cereal import log
 
 from openpilot.tools.longitudinal.replay_radar_brake_cap import parse_params, replay, report
 
@@ -31,14 +31,14 @@ def drive(seconds=20.0, v_ego=20.0, closing=6.0, d0=70.0, lead_status=False, lea
       msgs.append(m)
       d = d0 - closing * (t - start)
       m, rs = msg(t, "radarState")
-      rs.leadOne.status, rs.leadOne.dRel, rs.leadOne.radarTrackId = lead_status, d, lead_track
+      rs.leadOne.present, rs.leadOne.dRel, rs.leadOne.radarTrackId = lead_status, d, lead_track
       msgs.append(m)
     if k % 6 == 0:  # ~16 Hz radar
-      m, lt = msg(t, "liveTracks")
+      m, lt = msg(t, "radarTracks")
       d = d0 - closing * (t - start)
       if t >= start and d > 1.0:
         pts = lt.init("points", 1)
-        pts[0].trackId, pts[0].dRel, pts[0].yRel, pts[0].vRel, pts[0].measured = 3, d, 0.2, -closing, True
+        pts[0].trackId, pts[0].dRel, pts[0].yRel, pts[0].vRel, pts[0].deprecated.measured = 3, d, 0.2, -closing, True
       msgs.append(m)
   return msgs
 

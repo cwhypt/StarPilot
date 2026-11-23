@@ -14,6 +14,7 @@ ButtonType = structs.CarState.ButtonEvent.Type
 GearShifter = structs.CarState.GearShifter
 EventName = log.OnroadEvent.EventName
 NetworkLocation = structs.CarParams.NetworkLocation
+RADAR_NO_DATA_ALERT_FRAMES = int(10. / DT_CTRL)
 
 
 class CarEvents:
@@ -27,6 +28,7 @@ class CarEvents:
     self.low_speed_alert = False
     self.no_steer_warning = False
     self.silent_steer_warning = True
+    self.radar_no_data_frames = 0  # frames the one-time radarNoData alert has been shown
 
   def update(self, CS: car.CarState, CS_prev: car.CarState, CC: car.CarControl):
     if self.CP.brand in ('body', 'mock'):
@@ -81,6 +83,10 @@ class CarEvents:
       # stockFcw has no alert of its own, so raise the audible fcw alert (which also lights the dash FCW icon).
       if CS.stockFcw and radar_pcs_fcw(self.CP):
         events.add(EventName.fcw)
+      # Shown once per drive for 10 s: a silent radar bus otherwise degrades to vision-only unnoticed
+      if radar_pcs_fcw(self.CP) and CS.radarBusSilent and self.radar_no_data_frames < RADAR_NO_DATA_ALERT_FRAMES:
+        self.radar_no_data_frames += 1
+        events.add(EventName.radarNoData)
 
     elif self.CP.brand == 'gm':
       if self.volt_cc_profile:

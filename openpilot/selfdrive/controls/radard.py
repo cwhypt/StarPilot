@@ -207,6 +207,12 @@ class RadarD:
     # ARS510 publishes ~16 Hz but radard runs at 20 Hz: feed each radar record to the Kalman filters once
     self.dedupe_radar = dedupe_radar
     self.last_radar_mono = -1
+    self.radar_fresh = False
+    # Log-only B cap (TODO T4): ARS510 radars only, never feeds the planner
+    self.brake_cap = self.brake_cap_log = None
+    if dedupe_radar:
+      from openpilot.selfdrive.controls.lib.radar_brake_cap import CapEpisodeLog, RadarBrakeCap
+      self.brake_cap, self.brake_cap_log = RadarBrakeCap(), CapEpisodeLog()
     self.tracks: dict[int, Track] = {}
     self.honda_bosch_a = None
     if honda_bosch_a_radar:
@@ -317,6 +323,7 @@ class RadarD:
       radar_mono = int(sm.logMonoTime['radarTracks'])
       radar_fresh = not self.dedupe_radar or radar_mono != self.last_radar_mono
       self.last_radar_mono = radar_mono
+      self.radar_fresh = radar_fresh
 
       # *** remove missing points from meta data ***
       for ids in list(self.tracks.keys()):
@@ -368,8 +375,18 @@ class RadarD:
         self.radar_state.leadOne = get_lead(self.v_ego, self.ready, self.tracks, leads_v3[0], model_v_ego, self.lead_prob_filters[0].x, low_speed_override=True)
         self.radar_state.leadTwo = get_lead(self.v_ego, self.ready, self.tracks, leads_v3[1], model_v_ego,
                                           self.lead_prob_filters[1].x, low_speed_override=False)
+    if self.brake_cap is not None and self.radar_fresh:
+      self._log_brake_cap(sm, rr)
     if self.adjacent_enabled:
       self._qualified_adjacent(sm, rr)
+
+  def _log_brake_cap(self, sm: messaging.SubMaster, rr: car.RadarData) -> None:
+    t = sm.logMonoTime['radarTracks'] * 1e-9
+    res = self.brake_cap.update(t, rr.points, self.v_ego, unavailable=any(rr.errors.to_dict().values()))
+    lead = self.radar_state.leadOne
+    summary = self.brake_cap_log.update(t, res, self.v_ego, bool(lead.present), bool(lead.radar))
+    if summary is not None:
+      cloudlog.error(summary)  # error level reaches errorLogMessage, which is kept in qlogs
 
   def publish(self, pm: messaging.PubMaster):
     assert self.radar_state is not None

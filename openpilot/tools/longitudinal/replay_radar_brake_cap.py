@@ -5,7 +5,7 @@ For every liveTracks message it runs the cap on the radar's ACC target and compa
 asked for (longitudinalPlan.aTarget). Where the cap is lower by more than --min-extra it would have braked harder: those
 samples are grouped into episodes and classified by what radard/vision had at the time:
 
-  vision missed       leadOne.status was False: the gap this cap is meant to close
+  vision missed       leadOne.present was False: the gap this cap is meant to close
   vision other lead   leadOne was another object (different radar track and >25%/5 m away)
   same lead           leadOne was this car, the planner just braked less (tuning difference, not a perception gap)
 
@@ -130,9 +130,9 @@ def replay(msgs, params: RadarCapParams | None = None, min_extra: float = 0.2) -
       enabled = m.selfdriveState.enabled
     elif which == "radarState":
       lo = m.radarState.leadOne
-      lead = (lo.status, lo.dRel, lo.radarTrackId)
-    elif which == "liveTracks":
-      lt = m.liveTracks
+      lead = (lo.present, lo.dRel, lo.radarTrackId)
+    elif which in ("radarTracks", "liveTracks"):  # 7.0 renamed liveTracks to radarTracks
+      lt = getattr(m, which)
       unavailable = not m.valid or any(lt.errors.to_dict().values())
       r = cap.update(t, lt.points, v_ego, unavailable)
       res.reasons[r.reason] = res.reasons.get(r.reason, 0) + 1

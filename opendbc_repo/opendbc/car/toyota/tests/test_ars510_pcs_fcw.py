@@ -141,3 +141,58 @@ def test_carstate_reports_the_radar_alarm_as_stock_fcw(tmp_path):
     CI.can_parsers[Bus.radar].update([((t + 1) * DT_NANOS, frames)])
     results.append(CI.CS.update_radar_pcs_alarm(CI.can_parsers[Bus.radar]))
   assert results == [False, True, False]
+
+
+def test_radar_bus_silence_after_15_s_and_recovery(tmp_path):
+  from opendbc.car.toyota.carstate import RADAR_SILENT_FRAMES
+  drive = Drive(get_params(tmp_path))
+  silent = []
+  for _ in range(RADAR_SILENT_FRAMES):
+    drive.t += DT_NANOS
+    drive.cp_radar.update([(drive.t, [])])
+    silent.append(drive.CS.update_radar_bus_silence(drive.cp_radar))
+  assert not any(silent[:-1]) and silent[-1]
+  drive.t += DT_NANOS
+  drive.cp_radar.update([(drive.t, [(PCS_STATE, pcs_frame(0), 1)])])
+  assert drive.CS.update_radar_bus_silence(drive.cp_radar) is False
+
+
+def test_required_decel_event_is_logged_once_with_its_minimum(tmp_path, monkeypatch):
+  from opendbc.car.toyota import carstate
+  logged = []
+  monkeypatch.setattr(carstate.carlog, "error", logged.append)
+  drive = Drive(get_params(tmp_path))
+  packer = CANPacker(ARS510_DBC)
+
+  def cycle(dist, req):
+    drive.t += DT_NANOS
+    frames = [packer.make_can_msg("EVENT_OBJECT", 1, {"OBJECT_DIST": dist}), packer.make_can_msg("EVENT_STATE", 1, {"REQUIRED_DECEL": req})]
+    drive.cp_radar.update([(drive.t, [(a, d, b) for a, d, b in frames])])
+    drive.CS.update_required_decel_log(drive.cp_radar, 15.0)
+
+  cycle(0, 0)
+  for dist, req in ((20., -1.9), (18., -3.8), (16., -2.85)):
+    cycle(dist, req)
+  assert logged == []
+  cycle(0, 0)
+  assert len(logged) == 1
+  ev = logged[0]
+  assert ev["event"] == "ars510_required_decel" and ev["min_required_decel"] == pytest.approx(-3.8, abs=0.1)
+  assert ev["min_object_dist"] == pytest.approx(16., abs=0.05) and ev["duration_s"] == 0.03
+
+
+def test_radar_no_data_alert_is_shown_once_for_ten_seconds(tmp_path):
+  from opendbc.car import structs
+  from openpilot.cereal import log
+  from openpilot.selfdrive.car.car_events import CarEvents, RADAR_NO_DATA_ALERT_FRAMES
+  EventName = log.OnroadEvent.EventName
+
+  def names(events, cs):
+    return events.update(cs, cs, structs.CarControl()).names
+
+  silent = structs.CarState(canValid=True, vEgo=10., gearShifter='drive', radarBusSilent=True)
+  events = CarEvents(get_params(tmp_path))
+  shown = [EventName.radarNoData in names(events, silent) for _ in range(RADAR_NO_DATA_ALERT_FRAMES + 50)]
+  assert all(shown[:RADAR_NO_DATA_ALERT_FRAMES]) and not any(shown[RADAR_NO_DATA_ALERT_FRAMES:])
+  # without the opt-in the field is never set and the alert never shows
+  assert EventName.radarNoData not in names(CarEvents(get_params(tmp_path, mode=0)), silent)

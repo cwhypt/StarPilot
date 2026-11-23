@@ -43,3 +43,31 @@ def test_new_track_is_always_initialised():
   src.data['radarTracks'].init('errors')
   radar.update(src, src['radarTracks'])  # same record as before, but track 18 has never been seen
   assert radar.tracks[18].cnt == 1 and radar.tracks[17].cnt == 1
+
+
+def test_ars510_logs_a_brake_cap_episode_only_when_the_cap_fires(monkeypatch):
+  from openpilot.selfdrive.controls import radard
+  logged = []
+  monkeypatch.setattr(radard.cloudlog, "error", logged.append)
+  radar = RadarD(dedupe_radar=True)
+  for k in range(10):  # ACC target 30 m ahead closing at 8 m/s while ego does 15 m/s
+    src = Sources(MONO + k, points=((3, 30. - 0.5 * k, 0., -8.),))
+    src.data['radarTracks'].init('errors')
+    src.data['radarTracks'].points[0].deprecated.measured = True
+    radar.update(src, src['radarTracks'])
+  src = Sources(MONO + 20)
+  src.data['radarTracks'].init('errors')
+  radar.update(src, src['radarTracks'])
+  assert len(logged) == 1 and logged[0]["event"] == "radar_brake_cap" and logged[0]["min_cap"] < -0.3
+
+
+def test_other_cars_never_log_a_brake_cap(monkeypatch):
+  from openpilot.selfdrive.controls import radard
+  logged = []
+  monkeypatch.setattr(radard.cloudlog, "error", logged.append)
+  radar = RadarD()
+  for k in range(10):
+    src = Sources(MONO + k, points=((3, 30. - 0.5 * k, 0., -8.),))
+    src.data['radarTracks'].init('errors')
+    radar.update(src, src['radarTracks'])
+  assert radar.brake_cap is None and logged == []
