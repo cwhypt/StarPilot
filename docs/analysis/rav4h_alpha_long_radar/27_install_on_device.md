@@ -2,6 +2,14 @@
 
 状态：步骤基于代码阅读与公开文档；**未在真实设备上走过一遍**。StarPilot 官方安装说明在 wiki.firestar.link（本环境未能读取），以官方为准。
 
+## ⚠️ 2026-11-23：先别切换（AGNOS 版本冲突）
+
+实际设备：AGNOS **20.5.5**，官方 `starpilothq/openpilot` `stable`（7.0）。本分支 `launch_env.sh` 只接受 AGNOS `19.8.1 19.8.2 20.2-starpilot.1 20.2.1 20.5.1 20.5.2`，`launch_chffrplus.sh` 的 `agnos_init` 在版本不在列表时会按 `system/hardware/tici/agnos.json` **刷回 19.8.1**（含 xbl/abl 等引导分区）——这是降级，风险高。**在解决之前不要执行下面 §2 第 3 步的互换。**
+
+可行路线：
+1. 保持官方 7.0，先**关 Alpha Long** 开车收集 rlog（7.0 对 RAV4 自动启用 ARS510，正好是基线数据）；本分支只克隆到旁边目录跑离线脚本，不重启、不互换。
+2. 之后二选一：把 T2 移植到 7.0（需同时改 7.0 的 `configure_radar`，它在 `DISABLE_RADAR` 时关闭 ARS510，见 28 §3）；或在本分支把 20.5.5 加入接受列表（旧用户空间跑在新 AGNOS 上，未验证）。
+
 ## 0. 这个分支能直接在设备上跑吗
 
 - 分支 = 上游 `stable`（8589b73f）+ PR #230 + 本系列改动（T2、B 纯函数、检查/回放/探测脚本、文档）。
