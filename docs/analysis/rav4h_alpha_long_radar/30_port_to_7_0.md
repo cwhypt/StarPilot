@@ -75,5 +75,6 @@ python -m pytest -q opendbc_repo/opendbc/car/toyota/tests/test_ars510.py \
   openpilot/selfdrive/controls/tests/test_radard_dedupe.py \
   openpilot/selfdrive/controls/tests/test_radar_confirmed_fcw.py \
   openpilot/selfdrive/controls/tests/test_subaru_planner_fcw.py \
-  openpilot/selfdrive/controls/tests/test_voacc.py
+  openpilot/selfdrive/controls/tests/test_voacc.py \
+  openpilot/selfdrive/selfdrived/tests/test_alerts.py
 ```
