@@ -22,8 +22,12 @@ import math
 from dataclasses import asdict, dataclass, field
 
 from opendbc.can.dbc import DBC, Signal
-from opendbc.can.parser import get_raw_value
 from openpilot.selfdrive.controls.lib.radar_brake_cap import RadarBrakeCap
+
+
+def get_raw_value(dat, sig):  # 7.0 moved it onto Signal
+  return sig.get_raw_value(dat)
+
 
 ARS510_RADAR, DISABLE_RADAR = 16384, 4
 RADAR_BUS, CAR_BUS = 1, 0

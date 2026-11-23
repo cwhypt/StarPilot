@@ -17,7 +17,11 @@ import sys
 from dataclasses import asdict, dataclass, field
 
 from opendbc.can.dbc import DBC
-from opendbc.can.parser import get_raw_value
+
+
+def get_raw_value(dat, sig):  # 7.0 moved it onto Signal
+  return sig.get_raw_value(dat)
+
 
 ARS510_RADAR = 16384
 DISABLE_RADAR = 4
