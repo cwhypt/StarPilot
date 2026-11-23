@@ -4,7 +4,7 @@
 
 ## ⚠️ 2026-11-23：先别切换（AGNOS 版本冲突）
 
-实际设备：AGNOS **20.5.5**，官方 `starpilothq/openpilot` `stable`（7.0）。本分支 `launch_env.sh` 只接受 AGNOS `19.8.1 19.8.2 20.2-starpilot.1 20.2.1 20.5.1 20.5.2`，`launch_chffrplus.sh` 的 `agnos_init` 在版本不在列表时会按 `system/hardware/tici/agnos.json` **刷回 19.8.1**（含 xbl/abl 等引导分区）——这是降级，风险高。**在解决之前不要执行下面 §2 第 3 步的互换。**
+实际设备：AGNOS **20.5.5**，官方 `starpilothq/openpilot` `stable`（7.0）。本分支 `launch_env.sh` 只接受 AGNOS `19.8.1 19.8.2 20.2-starpilot.1 20.2.1 20.5.1 20.5.2`，`launch_chffrplus.sh` 的 `agnos_init` 在版本不在列表时会按 `system/hardware/tici/agnos.json` **刷回 19.8.1**（含 xbl/abl 等引导分区）——这是降级，风险高。**已处理（用户选择不用 7.0）：** `launch_env.sh` 的接受列表加入 `20.5.5`，切换后不刷 AGNOS。依据：列表本来就含 20.5.1/20.5.2；本分支 `.so` 为 cpython-312，7.0 `.python-version` 为 3.12。未在 20.5.5 上实测，开机异常就按 §2 的回退命令换回。
 
 可行路线：
 1. 保持官方 7.0，先**关 Alpha Long** 开车收集 rlog（7.0 对 RAV4 自动启用 ARS510，正好是基线数据）；本分支只克隆到旁边目录跑离线脚本，不重启、不互换。
