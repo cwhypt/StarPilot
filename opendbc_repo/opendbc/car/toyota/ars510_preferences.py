@@ -36,4 +36,5 @@ def configure_radar(cp, alpha_long_radar=False):
 
 def radar_pcs_fcw(cp):
   """True when the radar's own PCS alarm (private bus) must stand in for the silenced car-bus FCW (PCS_HUD)."""
-  return bool(cp.flags & ToyotaFlags.ARS510_RADAR and cp.flags & ToyotaFlags.DISABLE_RADAR)
+  # flag bits are per-brand: only Toyota's mean ARS510_RADAR / DISABLE_RADAR
+  return bool(cp.brand == "toyota" and cp.flags & ToyotaFlags.ARS510_RADAR and cp.flags & ToyotaFlags.DISABLE_RADAR)

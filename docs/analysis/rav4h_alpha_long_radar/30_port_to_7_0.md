@@ -24,7 +24,8 @@
 | `selfdrive/car/car_events.py` | Toyota：`CS.stockFcw and radar_pcs_fcw` → `EventName.fcw`（`stockFcw` 本身无告警） |
 | `selfdrive/controls/lib/radar_brake_cap.py` + `tools/longitudinal/{replay_radar_brake_cap,probe_required_decel,check_t2_radar_fcw}.py` | B/C 离线工具，路径改为 `openpilot.` 前缀；**B 仍未接入规划器**（与旧分支一致） |
 | `selfdrive/controls/radard.py` | T5 的去重部分：`RadarD(dedupe_radar=...)`，仅 Toyota + `ARS510_RADAR` 时由 `main` 打开。ARS510 约 16 Hz、radard 按 `modelV2` 20 Hz 轮询，约每 5 次有 1 次读到同一条 `radarTracks`，原先会被卡尔曼滤波用两次；现在同一条记录只喂一次（新轨迹首次出现除外）。其他车型逐位不变 |
-| 测试 | `test_ars510_pcs_fcw.py`（新，按 7.0 的 `VehicleStartupPreferences` 流程构造参数）；`test_ars510.py` 增加校验字节、故障位、LAT_DIST 回绕用例；`test_radard_dedupe.py`（新） |
+| `longitudinal_mpc_lib/long_mpc.py`、`longitudinal_planner.py` | 雷达确认的前车也能触发规划器 FCW（仅 `radar_pcs_fcw`：Toyota + ARS510 + Alpha Long，默认关）。原先 MPC 的 `crash_cnt` 只在视觉置信度 `modelProb > 0.9` 时累加；现在该条件放宽为「> 0.9，或 radard 已把雷达轨迹与视觉前车匹配（`radar=True`，`modelProb > 0.5`）」。置信度 ≤ 0.9 的新路径额外要求 TTC < 4 s 且接近速度 ≥ 0.5 m/s；> 0.9 的原路径不变。**只改 StarPilot 规划器**，`starpilot/longitudinal/upstream/` 的备用规划器没动 |
+| 测试 | `test_ars510_pcs_fcw.py`（新，按 7.0 的 `VehicleStartupPreferences` 流程构造参数）；`test_ars510.py` 增加校验字节、故障位、LAT_DIST 回绕用例；`test_radard_dedupe.py`、`test_radar_confirmed_fcw.py`（新） |
 
 ## 3. 旧分支有而 7.0 没有的 RAV4 相关项（按代码核对）
 
@@ -59,5 +60,7 @@ python -m pytest -q opendbc_repo/opendbc/car/toyota/tests/test_ars510.py \
   openpilot/starpilot/car/toyota/tests/test_radar_preferences.py \
   openpilot/starpilot/aol/tests/test_toyota.py \
   openpilot/selfdrive/controls/tests/test_radard_dedupe.py \
+  openpilot/selfdrive/controls/tests/test_radar_confirmed_fcw.py \
+  openpilot/selfdrive/controls/tests/test_subaru_planner_fcw.py \
   openpilot/selfdrive/controls/tests/test_voacc.py
 ```

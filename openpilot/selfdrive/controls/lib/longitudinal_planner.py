@@ -122,6 +122,8 @@ class LongitudinalPlanner:
     self.stop_speed = tuning.get("stop_speed", .3)
     self.max_accel_override = tuning.get("max_accel")
     self.mpc = LongitudinalMpc(dt=dt)
+    from opendbc.car.toyota.ars510_preferences import radar_pcs_fcw
+    self.mpc.radar_confirmed_fcw = radar_pcs_fcw(CP)
     self.model_lead_history = ModelLeadHistory()
     self.fcw = False
     self.dt = dt
@@ -352,6 +354,9 @@ class LongitudinalPlanner:
     self.fcw = self.mpc.crash_cnt > 2 and not sm['carState'].standstill
     if self.CP.carFingerprint in ('SUBARU_CROSSTREK_2025', 'SUBARU_IMPREZA_2025'):
       self.fcw = self.fcw and should_trigger_planner_fcw(sm['radarState'].leadOne, float(v_ego))
+    elif self.mpc.radar_confirmed_fcw and float(sm['radarState'].leadOne.modelProb) <= 0.9:
+      # radar-confirmed lead below the vision threshold: also require a short time to collision while closing
+      self.fcw = self.fcw and should_trigger_planner_fcw(sm['radarState'].leadOne, float(v_ego), True)
     if self.fcw:
       cloudlog.info("FCW triggered")
 

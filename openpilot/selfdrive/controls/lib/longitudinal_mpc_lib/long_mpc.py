@@ -63,8 +63,17 @@ LEAD_T_IDXS_MODEL = np.asarray(ModelConstants.LEAD_T_IDXS, dtype=np.float64)
 MODEL_LEAD_TRAJECTORY_MAX_LEAD_BRAKE = 0.5
 MODEL_LEAD_TRAJECTORY_MAX_CLOSING_TTC = 7.0
 
-def should_trigger_planner_fcw(lead, v_ego: float) -> bool:
-  if lead is None or not lead.present or float(lead.modelProb) <= 0.9:
+RADAR_CONFIRMED_FCW_MIN_PROB = 0.5  # radard only matches a radar track to a vision lead above this
+
+
+def fcw_lead_confirmed(lead, radar_confirmed: bool = False) -> bool:
+  """Vision confidence above 0.9, or (opt-in, ARS510 + Alpha Long) a radar track matched to the vision lead."""
+  prob = float(lead.modelProb)
+  return prob > 0.9 or bool(radar_confirmed and lead.radar and prob > RADAR_CONFIRMED_FCW_MIN_PROB)
+
+
+def should_trigger_planner_fcw(lead, v_ego: float, radar_confirmed: bool = False) -> bool:
+  if lead is None or not lead.present or not fcw_lead_confirmed(lead, radar_confirmed):
     return False
   closing_speed = max(0.0, v_ego - float(lead.vLead))
   if closing_speed < 0.5:
@@ -447,6 +456,7 @@ class LongitudinalMpc:
 
     self.last_cloudlog_t = 0
     self.crash_cnt = 0.0
+    self.radar_confirmed_fcw = False  # set by the planner for ARS510 + Alpha Long
     self.solution_status = 0
     # timers
     self.solve_time = 0.0
@@ -593,7 +603,7 @@ class LongitudinalMpc:
 
     self.run()
     if (np.any(lead_xv_0[FCW_IDXS,0] - self.x_sol[FCW_IDXS,0] < CRASH_DISTANCE) and
-            radarstate.leadOne.modelProb > 0.9):
+            fcw_lead_confirmed(radarstate.leadOne, self.radar_confirmed_fcw)):
       self.crash_cnt += 1
     else:
       self.crash_cnt = 0
