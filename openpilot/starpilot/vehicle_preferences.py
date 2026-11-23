@@ -49,6 +49,7 @@ class VehicleStartupPreferences:
   ford_bluepilot: tuple[tuple[str, str], ...] = field(default=(("disable_BP_lat_UI", "1"),), kw_only=True)
   toyota_lock_doors: bool = False
   toyota_unlock_doors: bool = False
+  toyota_radar_alpha_long: bool = field(default=False, kw_only=True)
   gm_cancel_remap: bool = False
   vw_stock_long: bool = field(default=False, kw_only=True)
 
@@ -132,6 +133,8 @@ class VehicleStartupPreferences:
                                      read_saved(params, "LockDoors", 8) == (b"1", True)),
                toyota_unlock_doors=bool(enabled and readable and safe in (None, b"0") and
                                        read_saved(params, "UnlockDoors", 8) == (b"1", True)),
+               toyota_radar_alpha_long=bool(enabled and readable and safe in (None, b"0") and
+                                            read_saved(params, "ToyotaRadarMode", 8) in ((b"1", True), (b"2", True))),
                gm_cancel_remap=bool(enabled and not disable_bolt and readable and safe in (None, b"0") and
                                     read_saved(params, "RemapCancelToDistance", 8) == (b"1", True)),
                volt_sng=volt_sng, gm_auto_hold=gm_auto_hold, volt_one_pedal=volt_one_pedal,
@@ -235,7 +238,7 @@ class VehicleStartupPreferences:
     if cp.brand == "toyota":
       apply_toyota_auto_hold(cp, self.toyota_auto_hold)
       from opendbc.car.toyota.ars510_preferences import configure_radar
-      configure_radar(cp)
+      configure_radar(cp, self.toyota_radar_alpha_long)
     from opendbc.bluepilot_lateral.hosts.starpilot.safety_param import init_ford_safety_param_starpilot
     init_ford_safety_param_starpilot(cp, dict(self.ford_bluepilot))
     from openpilot.starpilot.lateral.controller_selection import prepare_controller
@@ -282,7 +285,7 @@ class VehicleStartupPreferences:
       admitted = bool(cp.flags & ToyotaFlags.AUTO_BRAKE_HOLD)
       apply_toyota_auto_hold(cp, self.toyota_auto_hold and admitted)
       from opendbc.car.toyota.ars510_preferences import configure_radar
-      configure_radar(cp)
+      configure_radar(cp, self.toyota_radar_alpha_long)
 
     prepare_smoothing(cp, self.subaru_smoothing)
 

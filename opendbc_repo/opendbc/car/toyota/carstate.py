@@ -15,6 +15,7 @@ from opendbc.can.dbc import DBC as CANDBC
 from opendbc.car.toyota.prius_longitudinal import configured as prius_filter_configured
 from opendbc.car.toyota.rav4h_filter import Rav4hCANParser, configured as rav4h_filter_configured
 from opendbc.car.toyota.values import ToyotaFlags, CAR, DBC, STEER_THRESHOLD, EPS_SCALE, uses_toyota_auto_hold_aeb
+from opendbc.car.toyota.ars510_preferences import radar_pcs_fcw
 
 ButtonType = structs.CarState.ButtonEvent.Type
 SteerControlType = structs.CarParams.SteerControlType
@@ -31,9 +32,15 @@ TEMP_STEER_FAULTS = (0, 9, 11, 21, 25)
 PERM_STEER_FAULTS = (3, 17)
 
 
+ARS510_DBC = "toyota_tss2_ars510"
+PCS_STATE_TIMEOUT_FRAMES = 50  # PCS_STATE is 10 Hz; drop a held alarm after 0.5 s without a frame
+
+
 class CarState(CarStateBase):
   def __init__(self, CP):
     super().__init__(CP)
+    self.radar_pcs_alarm = False
+    self.radar_pcs_age = PCS_STATE_TIMEOUT_FRAMES
     can_define = CANDefine(DBC[CP.carFingerprint][Bus.pt])
     original_prius = prius_sdsu.configured(CP) or prius_advert_filter.configured(CP)
     self.eps_torque_scale = ((CP.safetyConfigs[0].safetyParam & 0xFF) / 100. if prius_advert_filter.configured(CP) else
@@ -205,6 +212,9 @@ class CarState(CarStateBase):
         self.acc_type = cp_acc.vl["ACC_CONTROL"]["ACC_TYPE"]
       ret.stockFcw = bool(cp_acc.vl["PCS_HUD"]["FCW"])
 
+    if Bus.radar in can_parsers:
+      ret.stockFcw = ret.stockFcw or self.update_radar_pcs_alarm(can_parsers[Bus.radar])
+
     # some TSS2 cars have low speed lockout permanently set, so ignore on those cars
     # these cars are identified by an ACC_TYPE value of 2.
     # TODO: it is possible to avoid the lockout and gain stop and go if you
@@ -336,6 +346,18 @@ class CarState(CarStateBase):
       self.dashboard_limit.update(timestamp, status, value_mps, valid_until_ns=expiry)
     return ret
 
+  def update_radar_pcs_alarm(self, cp_radar) -> bool:
+    alarms = cp_radar.vl_all["PCS_STATE"]["PCS_ALARM"]
+    power_up = cp_radar.vl_all["PCS_STATE"]["POWER_UP"]
+    if alarms:
+      self.radar_pcs_age = 0
+      self.radar_pcs_alarm = any(a and not p for a, p in zip(alarms, power_up, strict=True))
+    else:
+      self.radar_pcs_age = min(self.radar_pcs_age + 1, PCS_STATE_TIMEOUT_FRAMES)
+      if self.radar_pcs_age >= PCS_STATE_TIMEOUT_FRAMES:
+        self.radar_pcs_alarm = False
+    return self.radar_pcs_alarm
+
   @staticmethod
   def get_can_parsers(CP):
     if pedal_composite.configured(CP):
@@ -391,8 +413,12 @@ class CarState(CarStateBase):
                  LexusIsCANParser if CP.carFingerprint == CAR.LEXUS_IS else pedal.PedalCANParser if pedal.configured(CP) else
                  advert_filter.AdvertFilterCANParser if CP.flags & ToyotaFlags.FILTER_BUTTONS or advert_filter.configured(CP) else
                  Rav4hCANParser if rav4h_filter_configured(CP) else CANParser)
-    return {
+    parsers = {
       Bus.pt: pt_parser(DBC[CP.carFingerprint][Bus.pt], pt_messages, 0, **({"stock_word": CP.safetyConfigs[0].safetyParam} if stock else
         {"alternate_main": alternate_sdsu_main} if legacy_advert else {})),
       Bus.cam: CANParser(dbc_name, cam_messages, 2),
     }
+    if radar_pcs_fcw(CP):
+      # optional (nan): a missing radar bus never makes CAN invalid, it only leaves the alarm off
+      parsers[Bus.radar] = CANParser(ARS510_DBC, [("PCS_STATE", float('nan'))], 1)
+    return parsers

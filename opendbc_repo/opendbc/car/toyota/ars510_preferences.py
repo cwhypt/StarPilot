@@ -16,13 +16,24 @@ def supported(cp):
   )
 
 
-def configure_radar(cp):
+def configure_radar(cp, alpha_long_radar=False):
+  """Select the ARS510 ACC-target receiver.
+
+  Stock behaviour: with Alpha Long (DISABLE_RADAR) the radar is treated as absent. `alpha_long_radar` is an explicit
+  opt-in (ToyotaRadarMode 1/2, set by hand) that keeps the receiver on, expecting the radar's private bus to keep
+  transmitting after its car-bus output is disabled. Without DISABLE_RADAR it changes nothing.
+  """
   if not supported(cp):
     return False
   cp.flags &= ~int(ToyotaFlags.ARS510_RADAR | ToyotaFlags.ARS510_FUSED)
-  if cp.flags & ToyotaFlags.DISABLE_RADAR:
+  if cp.flags & ToyotaFlags.DISABLE_RADAR and not alpha_long_radar:
     cp.radarUnavailable = True
     return False
   cp.flags |= int(ToyotaFlags.ARS510_RADAR)
   cp.radarUnavailable = False
   return True
+
+
+def radar_pcs_fcw(cp):
+  """True when the radar's own PCS alarm (private bus) must stand in for the silenced car-bus FCW (PCS_HUD)."""
+  return bool(cp.flags & ToyotaFlags.ARS510_RADAR and cp.flags & ToyotaFlags.DISABLE_RADAR)

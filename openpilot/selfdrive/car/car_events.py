@@ -4,6 +4,7 @@ from opendbc.car import DT_CTRL, structs
 from opendbc.car.car_helpers import interfaces
 from opendbc.car.interfaces import MAX_CTRL_SPEED
 from opendbc.car.toyota.values import ToyotaFlags
+from opendbc.car.toyota.ars510_preferences import radar_pcs_fcw
 
 from openpilot.selfdrive.selfdrived.events import Events
 from openpilot.starpilot.car.events import event_rules, unsupported_gear
@@ -76,6 +77,10 @@ class CarEvents:
           if CS.vEgo < 0.001:
             # while in standstill, send a user alert
             events.add(EventName.manualRestart)
+      # Alpha Long silences the radar's car-bus FCW; the ARS510 radar-bus PCS alarm is read into stockFcw instead.
+      # stockFcw has no alert of its own, so raise the audible fcw alert (which also lights the dash FCW icon).
+      if CS.stockFcw and radar_pcs_fcw(self.CP):
+        events.add(EventName.fcw)
 
     elif self.CP.brand == 'gm':
       if self.volt_cc_profile:

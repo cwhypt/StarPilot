@@ -5,7 +5,7 @@ import pytest
 
 from opendbc.can import CANPacker
 from opendbc.car import gen_empty_fingerprint, structs
-from opendbc.car.toyota.ars510_acc_target import RadarInterface as AccRadarInterface, RADAR_DBC
+from opendbc.car.toyota.ars510_acc_target import LAT_CHECK, RadarInterface as AccRadarInterface, RADAR_DBC
 from opendbc.car.toyota.ars510_radar import Ars510Radar, IDLE_SLOT, RadarInterface as FusedRadarInterface
 from opendbc.car.toyota.interface import CarInterface
 from opendbc.car.toyota.radar_interface import RadarInterface
@@ -152,13 +152,25 @@ def test_fused_keeps_healthy_tracks_between_scans_then_reports_actual_silence(mo
   assert not ret.points and not ret.errors.radarUnavailableTemporary
 
 
+def with_check_byte(frame):
+  """ACC_TARGET_2 with the radar's check byte in byte 0, as every recorded frame has (LAT_DIST not wrapped)."""
+  crc = 0xFE
+  for i, column in enumerate(LAT_CHECK):
+    crc ^= column if frame[1 + i // 8] >> (7 - i % 8) & 1 else 0
+  return bytes([crc]) + frame[1:]
+
+
 def acc_frames(packer, counter, cycle, present=True, distance=35, relative_speed=-2, target_id=3):
+  """ACC_TARGET_1-3 as the radar sends them; ACC_TARGET_2 carries its check byte, as every recorded frame does."""
   return [
-    packer.make_can_msg(name, 1, values | {"COUNTER": counter % 16})
-    for name, values in (
-      ("ACC_TARGET_1", {"STATE": 5 if present else 1, "TARGET_ID": target_id, "REL_SPEED": relative_speed}),
-      ("ACC_TARGET_2", {"PRESENT": int(present), "LONG_DIST": distance, "LAT_DIST": 0.25}),
-      ("ACC_TARGET_3", {"TIMESTAMP": cycle}),
+    (a, with_check_byte(d) if a == 0x237 else d, b)
+    for a, d, b in (
+      packer.make_can_msg(name, 1, values | {"COUNTER": counter % 16})
+      for name, values in (
+        ("ACC_TARGET_1", {"STATE": 5 if present else 1, "TARGET_ID": target_id, "REL_SPEED": relative_speed}),
+        ("ACC_TARGET_2", {"PRESENT": int(present), "LONG_DIST": distance, "LAT_DIST": 0.25}),
+        ("ACC_TARGET_3", {"TIMESTAMP": cycle}),
+      )
     )
   ]
 
@@ -180,6 +192,36 @@ def test_acc_target_decodes_one_lead_once_per_cycle_and_clears_no_target():
     assert isnan(pt.deprecated.aRel) and isnan(pt.deprecated.yvRel)
   ret = radar.update([(1_600_000_000, acc_frames(packer, 30, 660000, present=False))])
   assert not ret.points and not ret.errors.canError
+
+
+def test_acc_target_reports_unavailable_while_the_radar_fault_flag_is_held():
+  radar, packer, reports = AccRadarInterface(structs.CarParams()), CANPacker(RADAR_DBC), []
+  for i in range(90):  # one set cycle at cycle 5 (power-up-like), held over cycles 10-19
+    c = i // 3
+    frames = acc_frames(packer, i, 60000 * (1 + c)) + [packer.make_can_msg("EVENT_STATE", 1, {"RADAR_FAULT": int(c == 5 or 10 <= c < 20)})]
+    ret = radar.update([(1_000_000_000 + i * 20_000_000, frames)])
+    if ret is not None:
+      reports.append((c, ret))
+  assert not any(r.errors.radarUnavailableTemporary for c, r in reports if c < 10)
+  held = [r for c, r in reports if 11 <= c < 20]
+  assert held and all(r.errors.radarUnavailableTemporary and not r.points for r in held)
+  assert all(r.points and not r.errors.radarUnavailableTemporary for c, r in reports if c >= 21)
+
+
+def test_acc_target_unwraps_a_wrapped_lateral_distance():
+  # A recorded ACC_TARGET_2 whose check byte carries the hidden 13th lateral bit: LAT_DIST reads -19.70 m, the target is
+  # 21.26 m to the left.
+  packer = CANPacker(RADAR_DBC)
+  wrapped = (0x237, bytes.fromhex("AD026580F2E8C550"), 1)
+  present = (0x235, bytes.fromhex("EA056C81CBDFAA1B"), 1)
+  radar, reports = AccRadarInterface(structs.CarParams()), []
+  for i in range(1, 11):
+    clock = packer.make_can_msg("ACC_TARGET_3", 1, {"TIMESTAMP": 60000 * i})
+    ret = radar.update([(1_000_000_000 + i * 60_000_000, [present, wrapped, clock])])
+    if ret is not None and ret.points:
+      reports.append(ret)
+  (pt,) = reports[-1].points
+  assert pt.yRel == pytest.approx(-19.70 + 40.96)
 
 
 def test_acc_target_decodes_captured_rav4_hybrid_frame_bank():
