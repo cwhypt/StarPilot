@@ -35,6 +35,17 @@ comma 的自定义软件安装器格式是 `installer.comma.ai/<GitHub 用户>/<
    ```
    本地分支名必须与远端相同，否则更新程序 `git fetch origin <本地分支名>` 会失败。
 
+   **更推荐（2026-11-23 补记）：另起一个干净目录再互换。** 官方 `stable` 现在是 7.0（28），目录结构不同，在原目录里 checkout 会留下 7.0 编译出来、被 git 忽略的文件。本分支没有 git 子模块，可以直接浅克隆：
+   ```bash
+   cd /data
+   git clone --depth 1 -b claude/quirky-goodall-sumqk9 https://github.com/cwhypt/StarPilot.git openpilot_rav4
+   ls openpilot_rav4/prebuilt            # 必须存在
+   mv openpilot openpilot_official       # 保留官方版本，回退时换回来
+   mv openpilot_rav4 openpilot
+   sudo reboot
+   ```
+   回退：`cd /data && mv openpilot openpilot_rav4 && mv openpilot_official openpilot && sudo reboot`。
+
 ## 3. 开机后的设置
 
 1. 设置里打开 Alpha Long（`ExperimentalLongitudinalEnabled`，openpilot 纵向）。
