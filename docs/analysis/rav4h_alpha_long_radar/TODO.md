@@ -2,7 +2,7 @@
 
 > 给接手的 agent：本页是唯一的任务清单。开始一项前把状态改为"进行中"，完成后改为"完成"并写上提交哈希。
 > 背景见 [README](README.md)；依据主要在 13、14 号文档。
-> 当前硬件前提：**暂不装过滤器**（配置 B：Alpha Long 开，雷达车内输出被 UDS 关闭，无原车 AEB/FCW）。用户尚未购买 comma，无实车数据。
+> 当前硬件前提：**暂不装过滤器**（配置 B：Alpha Long 开，雷达车内输出被 UDS 关闭，无原车 AEB/FCW）。2026-11-23：本分支已装到车机（AGNOS 20.5.5），尚无行车日志；交接说明见 [29](29_handoff_local_session.md)。
 > 当前代码基线（2026-11-21）：`upstream/stable`（8589b73f）+ PR #230（b66ba75d）。
 > 开发基线：上游发布分支已迁移为 `stable`（旧 `StarPilot` 停在 `0b2061df`，本分支基于 `823a5d5`，两者间无 Toyota/雷达改动，见 19），本仓库分支 `claude/quirky-goodall-sumqk9`。
 

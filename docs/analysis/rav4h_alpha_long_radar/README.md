@@ -49,6 +49,7 @@
 | 26 | [26_b_cut_in_coverage_and_c_probe.md](26_b_cut_in_coverage_and_c_probe.md) | B 对切入/部分重叠/横穿的覆盖（部分覆盖，T4b 扩展方向）；C 的离线探测脚本 `probe_required_decel.py` | 完成（未用真实日志） |
 | 27 | [27_install_on_device.md](27_install_on_device.md) | 在 comma 设备上安装本分支：先装官方 StarPilot，再 SSH 切换 origin/分支；开机设置、验证、驾驶顺序、回退 | 完成（未在设备上走过） |
 | 28 | [28_upstream_7_0_comparison.md](28_upstream_7_0_comparison.md) | 官方 7.0 与当前分支对比；7.0 在 Alpha Long 无过滤器时不用 ARS510 | 完成（代码对比，未上车） |
+| 29 | [29_handoff_local_session.md](29_handoff_local_session.md) | 交接：设备现状（已装本分支、AGNOS 20.5.5）、本系列提交、本地终端下一步与回退 | 完成 |
 
 > 05 对 01/04 有修正，并含一条**后续更正**：无过滤器时 stock ACCEL_CMD 取不到，但据上游 ars510-radar，雷达在 bus 1 上的目标数据在 UDS 禁用后仍存在（纯软件即可读），所以"自己重建的只减不增制动 cap"（04 方案 C）无需额外硬件；直接 min(stock ACCEL_CMD) 才需要过滤器。
 
