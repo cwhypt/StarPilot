@@ -320,9 +320,11 @@ class RadarD:
       self.honda_bosch_a.update_tracks(sm, rr, self)
     else:
       ar_pts = {pt.trackId: [pt.dRel, pt.yRel, pt.vRel] for pt in rr.points}
-      radar_mono = int(sm.logMonoTime['radarTracks'])
-      radar_fresh = not self.dedupe_radar or radar_mono != self.last_radar_mono
-      self.last_radar_mono = radar_mono
+      radar_fresh = True
+      if self.dedupe_radar:
+        radar_mono = int(sm.logMonoTime['radarTracks'])
+        radar_fresh = radar_mono != self.last_radar_mono
+        self.last_radar_mono = radar_mono
       self.radar_fresh = radar_fresh
 
       # *** remove missing points from meta data ***
@@ -442,7 +444,7 @@ def main() -> None:
   from opendbc.car.honda.bosch_a_radar import VERIFIED_BOSCH_A_CARS
   honda_bosch_a = CP.brand == "honda" and CP.carFingerprint in VERIFIED_BOSCH_A_CARS and not CP.radarUnavailable
   from opendbc.car.toyota.values import ToyotaFlags
-  ars510 = CP.brand == "toyota" and bool(CP.flags & ToyotaFlags.ARS510_RADAR) and not CP.radarUnavailable
+  ars510 = CP.brand == "toyota" and bool(getattr(CP, "flags", 0) & ToyotaFlags.ARS510_RADAR) and not CP.radarUnavailable
   RD = RadarD(CP.radarDelay, adjacent_enabled=adjacent_enabled, radar_available=not CP.radarUnavailable,
               honda_bosch_a_radar=honda_bosch_a, use_voacc=voacc_selected(params, CP), dedupe_radar=ars510)
   set_core_affinity([3, 5])

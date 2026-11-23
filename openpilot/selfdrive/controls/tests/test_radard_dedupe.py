@@ -29,11 +29,15 @@ def test_dedupe_feeds_each_radar_record_once():
 
 
 def test_dedupe_still_publishes_the_track_on_a_repeated_record():
+  # at low speed a radar point straight ahead becomes leadOne without vision (radard's low-speed override)
   radar = RadarD(dedupe_radar=True)
-  run(radar, [MONO, MONO])
-  src = source(MONO)
-  radar.update(src, src['radarTracks'])
-  assert radar.radar_state.leadOne.present and radar.radar_state.leadOne.dRel == 30.
+  for _ in range(3):  # the same radar record three radard cycles in a row
+    src = Sources(MONO, points=((17, 10., 0., -1.),))
+    src.data['radarTracks'].init('errors')
+    src.data['carState'].vEgo = 2.
+    radar.update(src, src['radarTracks'])
+    assert radar.radar_state.leadOne.present and radar.radar_state.leadOne.dRel == 10.
+  assert radar.tracks[17].cnt == 1
 
 
 def test_new_track_is_always_initialised():
