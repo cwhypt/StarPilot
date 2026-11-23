@@ -201,8 +201,12 @@ def get_lead(v_ego: float, ready: bool, tracks: dict[int, Track], lead_msg: capn
 
 class RadarD:
   def __init__(self, delay: float = 0.0, *, adjacent_enabled: bool = False, radar_available: bool = False,
-               clock_pair_fn=None, honda_bosch_a_radar: bool = False, use_voacc: bool = False):
+               clock_pair_fn=None, honda_bosch_a_radar: bool = False, use_voacc: bool = False,
+               dedupe_radar: bool = False):
     self.use_voacc = use_voacc
+    # ARS510 publishes ~16 Hz but radard runs at 20 Hz: feed each radar record to the Kalman filters once
+    self.dedupe_radar = dedupe_radar
+    self.last_radar_mono = -1
     self.tracks: dict[int, Track] = {}
     self.honda_bosch_a = None
     if honda_bosch_a_radar:
@@ -310,6 +314,9 @@ class RadarD:
       self.honda_bosch_a.update_tracks(sm, rr, self)
     else:
       ar_pts = {pt.trackId: [pt.dRel, pt.yRel, pt.vRel] for pt in rr.points}
+      radar_mono = int(sm.logMonoTime['radarTracks'])
+      radar_fresh = not self.dedupe_radar or radar_mono != self.last_radar_mono
+      self.last_radar_mono = radar_mono
 
       # *** remove missing points from meta data ***
       for ids in list(self.tracks.keys()):
@@ -324,9 +331,11 @@ class RadarD:
         v_lead = rpt[2] + self.v_ego_hist[0]
 
         # create the track if it doesn't exist or it's a new track
-        if ids not in self.tracks:
+        is_new = ids not in self.tracks
+        if is_new:
           self.tracks[ids] = Track(ids, v_lead, self.kalman_params)
-        self.tracks[ids].update(rpt[0], rpt[1], rpt[2], v_lead)
+        if radar_fresh or is_new:
+          self.tracks[ids].update(rpt[0], rpt[1], rpt[2], v_lead)
 
     # *** publish radarState ***
     self.radar_state_valid = sm.all_checks()
@@ -415,8 +424,10 @@ def main() -> None:
 
   from opendbc.car.honda.bosch_a_radar import VERIFIED_BOSCH_A_CARS
   honda_bosch_a = CP.brand == "honda" and CP.carFingerprint in VERIFIED_BOSCH_A_CARS and not CP.radarUnavailable
+  from opendbc.car.toyota.values import ToyotaFlags
+  ars510 = CP.brand == "toyota" and bool(CP.flags & ToyotaFlags.ARS510_RADAR) and not CP.radarUnavailable
   RD = RadarD(CP.radarDelay, adjacent_enabled=adjacent_enabled, radar_available=not CP.radarUnavailable,
-              honda_bosch_a_radar=honda_bosch_a, use_voacc=voacc_selected(params, CP))
+              honda_bosch_a_radar=honda_bosch_a, use_voacc=voacc_selected(params, CP), dedupe_radar=ars510)
   set_core_affinity([3, 5])
 
   while 1:
