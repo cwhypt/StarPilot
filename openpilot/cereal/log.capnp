@@ -130,6 +130,7 @@ struct OnroadEvent @0xc4fa6047f024e718 {
     userBookmark @95;
     userBookmarkNotPaired @104;
     radarNoData @105;
+    radarNoTarget @106;
     excessiveActuation @96;
     bigModelLoading @100;
     bigModelFailed @102;
@@ -738,6 +739,8 @@ struct ChestnutState {
 struct RadarState @0x9a185389d6fdd05f {
   mdMonoTime @6 :UInt64;  # for debugging
   radarErrors @13 :Car.RadarData.Error;
+  # Toyota ARS510: a confident vision lead for a while, but the radar never reported an ACC target this drive
+  radarNoTarget @14 :Bool;
 
   leadOne @3 :LeadData;
   leadTwo @4 :LeadData;

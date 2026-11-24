@@ -90,6 +90,7 @@ MonitoringPolicy = log.DriverMonitoringState.MonitoringPolicy
 IGNORED_SAFETY_MODES = (SafetyModel.silent, SafetyModel.noOutput)
 HKG_ANGLE_LIMIT_WARNING_DEG = 176.0
 HKG_ANGLE_LIMIT_WARNING_NS = 200_000_000
+RADAR_NO_TARGET_ALERT_FRAMES = 1000  # 10 s at 100 Hz
 
 
 class SelfdriveD:
@@ -149,6 +150,7 @@ class SelfdriveD:
     self.conditional_result = ConsumerResult(False, False, 'disabled')
 
     self.car_events = CarEvents(self.CP)
+    self.radar_no_target_frames = 0
     from openpilot.starpilot.car.tesla.stock_events import StockCruiseConsumer
     self.tesla_stock_consumer = StockCruiseConsumer(self.CP)
     self.tesla_stock_alerts = []
@@ -569,6 +571,9 @@ class SelfdriveD:
         self.events.add(EventName.radarTempUnavailable)
       elif any(self.sm['radarState'].radarErrors.to_dict().values()):
         self.events.add(EventName.radarFault)
+      if self.sm['radarState'].radarNoTarget and self.radar_no_target_frames < RADAR_NO_TARGET_ALERT_FRAMES:
+        self.radar_no_target_frames += 1  # once per drive, 10 s; radard latches the flag
+        self.events.add(EventName.radarNoTarget)
     hardware_events_added = len(self.events) - num_events
 
     from openpilot.starpilot.car.hyundai.aol import source_deadline_supported

@@ -440,5 +440,6 @@
   "wheel:VeryLongCancelButtonControl",
   "wheel:VeryLongDistanceButtonControl",
   "wheel:VeryLongModeButtonControl",
-  "wheel:VeryLongStarButtonControl"
+  "wheel:VeryLongStarButtonControl",
+  "ToyotaRadarMode"
 ]

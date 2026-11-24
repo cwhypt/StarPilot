@@ -1,4 +1,5 @@
 """ARS510 publishes ~16 Hz while radard runs at 20 Hz: a repeated radar record must not be fed to the Kalman filters twice."""
+import pytest
 from openpilot.selfdrive.controls.radard import RadarD
 from openpilot.selfdrive.controls.tests.test_adjacent_radar_transport import MONO, Sources
 
@@ -75,3 +76,57 @@ def test_other_cars_never_log_a_brake_cap(monkeypatch):
     src.data['radarTracks'].init('errors')
     radar.update(src, src['radarTracks'])
   assert radar.brake_cap is None and logged == []
+
+
+def no_target_source(stamp, *, points=(), prob=.95, dist=30., v_ego=15.):
+  src = Sources(stamp, points=points)
+  src.data['radarTracks'].init('errors')
+  src.data['carState'].vEgo = v_ego
+  lead = src.data['modelV2'].leadsV3[0]
+  lead.prob, lead.x, lead.y, lead.v, lead.a = prob, [dist], [0.], [10.], [0.]
+  lead.xStd, lead.yStd, lead.vStd = [1.], [1.], [1.]
+  return src
+
+
+def test_no_target_latches_after_10_s_of_vision_lead_without_any_radar_point(monkeypatch):
+  from openpilot.selfdrive.controls import radard
+  logged = []
+  monkeypatch.setattr(radard.cloudlog, "error", logged.append)
+  radar = RadarD(dedupe_radar=True)
+  flags = []
+  for k in range(int(radard.NO_TARGET_VISION_S / radard.DT_MDL) + 5):
+    src = no_target_source(MONO + k)
+    radar.update(src, src['radarTracks'])
+    flags.append(radar.radar_state.radarNoTarget)
+  assert not any(flags[:int(radard.NO_TARGET_VISION_S / radard.DT_MDL) - 1]) and flags[-1]
+  assert [e["event"] for e in logged] == ["ars510_no_acc_target"]
+
+
+def test_no_target_never_fires_once_the_radar_reported_a_target():
+  from openpilot.selfdrive.controls import radard
+  radar = RadarD(dedupe_radar=True)
+  src = no_target_source(MONO, points=((3, 30., 0., -1.),))
+  radar.update(src, src['radarTracks'])
+  for k in range(1, int(radard.NO_TARGET_VISION_S / radard.DT_MDL) + 50):
+    src = no_target_source(MONO + k)
+    radar.update(src, src['radarTracks'])
+  assert not radar.radar_state.radarNoTarget
+
+
+@pytest.mark.parametrize("kwargs", [dict(prob=.5), dict(dist=90.), dict(v_ego=2.)])
+def test_no_target_ignores_weak_far_or_slow_cases(kwargs):
+  from openpilot.selfdrive.controls import radard
+  radar = RadarD(dedupe_radar=True)
+  for k in range(int(radard.NO_TARGET_VISION_S / radard.DT_MDL) + 50):
+    src = no_target_source(MONO + k, **kwargs)
+    radar.update(src, src['radarTracks'])
+  assert not radar.radar_state.radarNoTarget
+
+
+def test_other_cars_never_set_no_target():
+  from openpilot.selfdrive.controls import radard
+  radar = RadarD()
+  for k in range(int(radard.NO_TARGET_VISION_S / radard.DT_MDL) + 50):
+    src = no_target_source(MONO + k)
+    radar.update(src, src['radarTracks'])
+  assert not radar.radar_state.radarNoTarget

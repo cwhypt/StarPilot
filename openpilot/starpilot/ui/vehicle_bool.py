@@ -1,7 +1,7 @@
 """Confirmation text for parked vehicle preferences."""
 
 VEHICLE_BOOL_KEYS = frozenset(("AlphaLongitudinalEnabled", "SubaruAvhStartup", "SubaruStopStartOff", "SubaruSNG", "SubaruRedneckCruise", "RedneckCruise",
-                              "GMPedalLongitudinal", "DisableOpenpilotLongitudinal", "LongPitch", "VoltSNG", "SNGHack", "GMAutoHold", "VoltOnePedalMode",
+                              "GMPedalLongitudinal", "DisableOpenpilotLongitudinal", "LongPitch", "VoltSNG", "SNGHack", "ToyotaRadarMode", "GMAutoHold", "VoltOnePedalMode",
                               "TeslaCoopSteering", "TeslaAOLScreenTap", "TeslaAOLDisengageOnBrake",
                               "RemoteStartBootsComma", "HKGRemoteStartBootsComma", "IgnoreIgnitionLine", "TeslaWakeOnCAN"))
 
@@ -34,6 +34,9 @@ def confirmation_question(request):
     return f"{verb} software cruise after the next startup? Stock ACC keeps pedal control."
   if request.key == "SNGHack":
     return f"{verb} Toyota stop-and-go assistance after the next startup?"
+  if request.key == "ToyotaRadarMode":
+    return (f"{verb} the Continental radar with Alpha Long after the next startup? This is experimental: the radar's private " +
+            "bus is not verified to keep transmitting once Alpha Long disables its factory output.")
   if request.key == "VoltSNG":
     return f"{verb} Volt stop-and-go assistance after the next startup?"
   if request.key == "GMAutoHold":

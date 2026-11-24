@@ -9,7 +9,7 @@
 - **显式开启**：`ToyotaRadarMode` = `1`（或 `2`）+ Alpha Long（`DISABLE_RADAR`）+ RAV4 TSS2 2022/2023：
   - 打开 ARS510 ACC 目标接收器（`ARS510_RADAR`，`radarUnavailable=False`）；
   - T2：雷达私有总线（bus 1）`PCS_STATE` 0x100 的 `PCS_ALARM` → `carState.stockFcw` → `EventName.fcw`（屏幕 + 声音 + 仪表 FCW 图标）。首帧 `FF FF`（POWER_UP）忽略，0.5 s 无帧自动清除。
-- 复用现有参数键 `ToyotaRadarMode`（新增键需要重编 `params_pyx.so`，所以没加）。设置：`echo -n 1 > /data/params/d/ToyotaRadarMode`（重启 openpilot 生效）。
+- 复用现有参数键 `ToyotaRadarMode`（新增键需要重编 `params_pyx.so`，所以没加）。设置：Vehicle Settings 页的 "Radar with Alpha Long (experimental)" 开关，或 `echo -n 1 > /data/params/d/ToyotaRadarMode`（下次启动生效）。
 - 只在 `DISABLE_RADAR` 时生效：不开 Alpha Long 时 7.0 本来就自动用 ACC 目标，T2 不启用（原车 FCW 还在，避免重复）。
 
 ## 2. 改了什么
@@ -30,6 +30,8 @@
 | `selfdrive/car/car_events.py` | `radarBusSilent` 且已开启本选项 → `radarNoData` 提示（"Radar Data Not Received / Radar FCW off; driving vision-only"），**每次开车只显示一次、10 s，不退出** |
 | `selfdrive/controls/radard.py` + `radar_brake_cap.py`（`CapEpisodeLog`） | **只记录**：ARS510 车上每个雷达周期跑 B cap；cap 生效的一段连续周期结束时记一行摘要（最小 cap、最近距离、最大接近速度、期间 leadOne 是否存在/是否雷达匹配、`vision_missed`）。不进规划器 |
 | `tools/longitudinal/*`、`radar_brake_cap.measured()` | 修正：7.0 的日志里雷达点在 `radarTracks`（不再是 `liveTracks`），`measured` 在 `deprecated` 下，`leadOne.status` 改名 `present`。之前移植的工具在 7.0 日志上会找不到雷达点，现在两种都认 |
+| `selfdrive/controls/radard.py`、`selfdrived.py`、`cereal/log.capnp`（`RadarState.radarNoTarget`、`EventName.radarNoTarget`） | 雷达总线在发、但**前车目标一直为空**的检测：视觉前车（置信度 > 0.9、60 m 内、车速 > 5 m/s）累计 10 s，而本次行车雷达从未给出任何目标 → 锁存 `radarNoTarget`，记一行 `ars510_no_acc_target`；Alpha Long 下显示一次 "Radar Sees No Lead"（10 s，不退出）。雷达给过一次目标后不再检查 |
+| `starpilot/ui/feature_settings_owner.py`、`vehicle_bool.py`、`galaxy/setting_descriptions.py` | Galaxy / 车机 **Vehicle Settings 页新增开关 "Radar with Alpha Long (experimental)"**，对应 `ToyotaRadarMode`（0/1）。只在 RAV4 TSS2 2022/2023 显示，只能停车时改，需确认，下次启动生效。存成 `2` 的旧值会显示为无效，改回 0/1 即可 |
 | 测试 | `test_ars510_pcs_fcw.py`（新，按 7.0 的 `VehicleStartupPreferences` 流程构造参数）；`test_ars510.py` 增加校验字节、故障位、LAT_DIST 回绕用例；`test_radard_dedupe.py`、`test_radar_confirmed_fcw.py`（新） |
 
 ## 3. 旧分支有而 7.0 没有的 RAV4 相关项（按代码核对）
@@ -53,6 +55,7 @@
 - `{"event": "ars510_radar_bus", "silent": true/false, ...}`：雷达私有总线停/恢复
 - `{"event": "ars510_required_decel", ...}`：一次雷达短 TTC 事件
 - `{"event": "radar_brake_cap", ..., "vision_missed": true/false}`：B cap 会生效的一段；`vision_missed=true` 就是 B 要补的缺口
+- `{"event": "ars510_no_acc_target", ...}`：雷达总线在、前车目标一直空
 
 ## 5. 已知限制
 
@@ -76,5 +79,7 @@ python -m pytest -q opendbc_repo/opendbc/car/toyota/tests/test_ars510.py \
   openpilot/selfdrive/controls/tests/test_radar_confirmed_fcw.py \
   openpilot/selfdrive/controls/tests/test_subaru_planner_fcw.py \
   openpilot/selfdrive/controls/tests/test_voacc.py \
-  openpilot/selfdrive/selfdrived/tests/test_alerts.py
+  openpilot/selfdrive/selfdrived/tests/test_alerts.py \
+  openpilot/starpilot/car/toyota/tests/test_radar_mode_setting.py \
+  openpilot/starpilot/galaxy/tests/test_setting_descriptions.py
 ```

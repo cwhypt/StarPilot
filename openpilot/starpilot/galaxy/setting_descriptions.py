@@ -106,6 +106,8 @@ DESCRIPTIONS = {
   'AlwaysAllowUploads': 'Allows queued full logs and videos to upload over metered networks. This uses mobile data.',
   'UseVOACC': ('Use vision-only adaptive cruise control instead of radar-assisted lead detection. ' +
                'Requires StarPilot longitudinal control. Applies next drive; radar faults and safety checks remain active.'),
+  'ToyotaRadarMode': ('Keeps the Continental radar as a lead source with Alpha Long and adds the radar’s own collision ' +
+    'alarm as a forward collision warning. Experimental: if the radar stops transmitting, openpilot disengages.'),
   'ToyotaAutoHold': ('Holds the brakes after you press the brake for over one second at a complete stop ' +
     'with cruise main on and cruise disengaged. Press the accelerator to release.'),
   'GMPedalLongitudinal': 'Uses a detected compatible pedal interceptor for StarPilot acceleration control.',
@@ -211,6 +213,7 @@ INITIALIZATION = {
   'TurnAssist': ('Applies when driving processes next start: the selected torque controller creates its ' +
     'low-speed feedback controller and filter state at initialization.'),
   'ToyotaAutoHold': 'Requires the next vehicle startup to configure the brake-hold permission in CarParams and Panda safety.',
+  'ToyotaRadarMode': 'Requires the next vehicle startup to select the radar receiver in CarParams.',
   'DisableOpenpilotLongitudinal': 'Requires the next vehicle startup to rebuild cruise ownership and Panda safety configuration.',
   'GMAutoHold': 'First enable requires the next vehicle startup to configure the brake-hold safety permission. An already admitted hold can be disabled live.',
   'VoltOnePedalMode': ('First enable requires the next vehicle startup to configure the braking safety ' +

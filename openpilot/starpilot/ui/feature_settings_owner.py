@@ -106,7 +106,7 @@ BOOL_DEFAULTS = {
   "SubaruSNG": False,
   "SubaruRedneckCruise": False,
   "RedneckCruise": False,
-  "ReverseCruise": False, "ToyotaAutoHold": False, "SNGHack": False, "JeepBrakeHold": False, "VoltSNG": False, "GMAutoHold": False, "VoltOnePedalMode": False,
+  "ReverseCruise": False, "ToyotaAutoHold": False, "SNGHack": False, "ToyotaRadarMode": False, "JeepBrakeHold": False, "VoltSNG": False, "GMAutoHold": False, "VoltOnePedalMode": False,
   "RemapCancelToDistance": False, "LongPitch": True, "DisableOpenpilotLongitudinal": False,
   "SpeedLimitController": False, "ShowSpeedLimits": True,
   "SLCOnEngage": False,
@@ -473,6 +473,25 @@ class FeatureSettingsOwner:
     return commit_exact(self.params, key="SNGHack", max_bytes=8, expected=request.expected,
                         raw=b"1" if request.value == "On" else b"0", authorized=authorized,
                         temp_prefix=".toyota-sng-").verified
+
+  def _toyota_radar_capability(self):
+    from opendbc.car.toyota.ars510_preferences import supported
+    cp = self.vehicle_params()
+    if cp is None or not supported(cp):
+      return None
+    return (str(cp.carFingerprint), int(cp.flags),
+            tuple((str(config.safetyModel), int(config.safetyParam)) for config in cp.safetyConfigs))
+
+  def _apply_toyota_radar(self, request):
+    if not request.confirmation or request.value not in ("Off", "On") or request.dependencies:
+      return False
+    def authorized():
+      return (self.authority("parked_preferences") and
+              request.capability is not None and request.capability == self._toyota_radar_capability() and
+              request.vehicle_fingerprint == self.vehicle_fingerprint() and request.expected in (None, b"0", b"1"))
+    return commit_exact(self.params, key="ToyotaRadarMode", max_bytes=8, expected=request.expected,
+                        raw=b"1" if request.value == "On" else b"0", authorized=authorized,
+                        temp_prefix=".toyota-radar-").verified
 
   def _auto_hold_capability(self) -> tuple | None:
     from opendbc.car.toyota.interface import toyota_auto_hold_supported
@@ -953,6 +972,14 @@ class FeatureSettingsOwner:
                              configurable and parked and self.authority("parked_preferences"),
                              "Automatic resume for Toyota/Lexus vehicles without factory stop-and-go. Applies after the next startup.")
         rows.append(replace(row, available=row.available and self._readable("SNGHack"), capability=sng_capability))
+      radar_capability = self._toyota_radar_capability()
+      if radar_capability is not None:
+        row = self._bool_row("ToyotaRadarMode", "Radar with Alpha Long (experimental)",
+                             configurable and parked and self.authority("parked_preferences"),
+                             "Keeps the Continental radar as a lead source while Alpha Long disables its factory output, and adds " +
+                             "the radar's own collision alarm as an FCW. Only has an effect with Alpha Long. If the radar stops " +
+                             "transmitting, openpilot disengages. Applies after the next startup.")
+        rows.append(replace(row, available=row.available and self._readable("ToyotaRadarMode"), capability=radar_capability))
       jeep_capability = self._jeep_hold_capability()
       if jeep_capability is not None:
         row = self._bool_row("JeepBrakeHold", "Jeep Brake Hold",
@@ -1536,6 +1563,8 @@ class FeatureSettingsOwner:
       return self._apply_alpha_long(request)
     if key == "SNGHack":
       return self._apply_toyota_sng(request)
+    if key == "ToyotaRadarMode":
+      return self._apply_toyota_radar(request)
     if key == "ToyotaAutoHold":
       return self._apply_auto_hold(request)
     if key == PLANNER_SELECTION_KEY:

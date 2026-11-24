@@ -882,6 +882,11 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
                                        priority=Priority.LOW),
   },
 
+  EventName.radarNoTarget: {
+    ET.PERMANENT: NormalPermanentAlert("Radar Sees No Lead", "Radar ACC target empty; driving vision-only", duration=1.,
+                                       priority=Priority.LOW),
+  },
+
   EventName.radarTempUnavailable: {
     ET.SOFT_DISABLE: soft_disable_alert("Radar Temporarily Unavailable"),
     ET.NO_ENTRY: NoEntryAlert("Radar Temporarily Unavailable"),

@@ -31,6 +31,10 @@ SPEED, ACCEL = 0, 1     # Kalman filter states enum
 
 # stationary qualification parameters
 V_EGO_STATIONARY = 4.   # no stationary object flag below this speed
+NO_TARGET_VISION_S = 10.  # s of confident vision lead (cumulative) before calling the ARS510 ACC target empty
+NO_TARGET_MIN_PROB = 0.9
+NO_TARGET_MAX_DIST = 60.  # m; the radar's ACC target should certainly cover a lead this close
+NO_TARGET_MIN_SPEED = 5.  # m/s
 
 RADAR_TO_CAMERA = 1.52  # RADAR is ~ 1.5m ahead from center of mesh frame
 
@@ -208,6 +212,11 @@ class RadarD:
     self.dedupe_radar = dedupe_radar
     self.last_radar_mono = -1
     self.radar_fresh = False
+    # ARS510 diagnostic: radar bus alive but its ACC target stays empty while vision clearly sees a lead
+    self.no_target_check = dedupe_radar
+    self.radar_target_seen = False
+    self.vision_only_s = 0.0
+    self.radar_no_target = False
     # Log-only B cap (TODO T4): ARS510 radars only, never feeds the planner
     self.brake_cap = self.brake_cap_log = None
     if dedupe_radar:
@@ -379,8 +388,29 @@ class RadarD:
                                           self.lead_prob_filters[1].x, low_speed_override=False)
     if self.brake_cap is not None and self.radar_fresh:
       self._log_brake_cap(sm, rr)
+    if self.no_target_check:
+      self._check_radar_no_target(sm, rr)
+    self.radar_state.radarNoTarget = self.radar_no_target
     if self.adjacent_enabled:
       self._qualified_adjacent(sm, rr)
+
+  def _check_radar_no_target(self, sm: messaging.SubMaster, rr: car.RadarData) -> None:
+    """Latch radarNoTarget after NO_TARGET_VISION_S of confident close vision leads with no radar point at all this drive.
+
+    Covers the case the bus-silence check cannot: the radar keeps sending (PCS_STATE etc.) but, with its ACC disabled
+    under Alpha Long, never reports a target, so radard silently runs vision-only."""
+    if self.radar_target_seen or self.radar_no_target:
+      return
+    if len(rr.points):
+      self.radar_target_seen = True
+      return
+    leads = sm['modelV2'].leadsV3
+    if (len(leads) and leads[0].prob > NO_TARGET_MIN_PROB and len(leads[0].x) and leads[0].x[0] < NO_TARGET_MAX_DIST and
+        self.v_ego > NO_TARGET_MIN_SPEED):
+      self.vision_only_s += DT_MDL
+      if self.vision_only_s >= NO_TARGET_VISION_S:
+        self.radar_no_target = True
+        cloudlog.error({"event": "ars510_no_acc_target", "vision_lead_s": round(self.vision_only_s, 1)})
 
   def _log_brake_cap(self, sm: messaging.SubMaster, rr: car.RadarData) -> None:
     t = sm.logMonoTime['radarTracks'] * 1e-9
