@@ -466,6 +466,7 @@ class SceneProjector:
     horizon = None
     stop_horizon = None
     current_stop = None
+    model_should_stop = None
     model_transport_current = False
     if model is not None:
       eof = _field(model, 'timestampEof')
