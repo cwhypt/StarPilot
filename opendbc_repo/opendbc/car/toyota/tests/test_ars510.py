@@ -260,3 +260,61 @@ def test_rav4_startup_wait_does_not_stall_live_tracks():
   outputs = [radar.update([(1_000_000_000 + i * 10_000_000, [])]) for i in range(700)]
   assert sum(r is not None for r in outputs) == 140
   assert all(not r.points and not r.errors.radarUnavailableTemporary for r in outputs if r is not None)
+
+
+def advisory_radar():
+  """The Alpha Long opt-in receiver: DISABLE_RADAR set and ARS510_RADAR kept on by ToyotaRadarMode."""
+  CP = structs.CarParams()
+  CP.flags = int(ToyotaFlags.DISABLE_RADAR | ToyotaFlags.ARS510_RADAR)
+  return AccRadarInterface(CP)
+
+
+@pytest.mark.parametrize("silent_clock", [False, True])
+def test_alpha_long_opt_in_drops_to_vision_only_when_the_radar_goes_silent(silent_clock):
+  radar, packer = advisory_radar(), CANPacker(RADAR_DBC)
+  assert radar.update([(1_000_000_000, acc_frames(packer, 0, 60000))]).points
+  outputs = []
+  for i in range(1, 51):
+    frames = acc_frames(packer, i, 60000) if silent_clock else []
+    outputs.append(radar.update([(1_000_000_000 + i * 20_000_000, frames)]))
+  reports = [r for r in outputs if r is not None]
+  # keeps publishing (radard and selfdrived see a live radarTracks), but with no points and no error to soft disable on
+  assert reports and all(not r.points and not any(r.errors.to_dict().values()) for r in reports)
+  assert radar.degraded_reason == "silent"
+  # the radar comes back: points again, degraded state cleared
+  ret = radar.update([(2_100_000_000, acc_frames(packer, 51, 120000))])
+  assert ret.points and not any(ret.errors.to_dict().values()) and radar.degraded_reason is None
+
+
+def test_alpha_long_opt_in_drops_to_vision_only_while_the_radar_fault_flag_is_held():
+  radar, packer, reports = advisory_radar(), CANPacker(RADAR_DBC), []
+  for i in range(90):
+    c = i // 3
+    frames = acc_frames(packer, i, 60000 * (1 + c)) + [packer.make_can_msg("EVENT_STATE", 1, {"RADAR_FAULT": int(10 <= c < 20)})]
+    ret = radar.update([(1_000_000_000 + i * 20_000_000, frames)])
+    if ret is not None:
+      reports.append((c, ret))
+  assert not any(any(r.errors.to_dict().values()) for _, r in reports)
+  held = [r for c, r in reports if 11 <= c < 20]
+  assert held and all(not r.points for r in held)
+  assert all(r.points for c, r in reports if c >= 21)
+
+
+def test_alpha_long_opt_in_never_reports_can_error(monkeypatch):
+  radar, packer = advisory_radar(), CANPacker(RADAR_DBC)
+  radar.update([(1_000_000_000, acc_frames(packer, 0, 60000))])
+  monkeypatch.setattr(type(radar.rcp), "can_valid", property(lambda self: False))
+  ret = radar.update([(1_060_000_000, acc_frames(packer, 1, 120000))])
+  assert ret is not None and not ret.points and not ret.errors.canError
+  assert radar.degraded_reason == "can_invalid"
+
+
+def test_stock_receiver_still_reports_radar_errors():
+  # Without DISABLE_RADAR (stock long or a radar CAN filter) 7.0's behaviour is unchanged: errors still reach selfdrived.
+  CP = structs.CarParams()
+  CP.flags = int(ToyotaFlags.ARS510_RADAR)
+  radar, packer = AccRadarInterface(CP), CANPacker(RADAR_DBC)
+  assert not radar.advisory
+  radar.update([(1_000_000_000, acc_frames(packer, 0, 60000))])
+  outputs = [radar.update([(1_000_000_000 + i * 20_000_000, [])]) for i in range(1, 51)]
+  assert any(r is not None and r.errors.radarUnavailableTemporary for r in outputs)

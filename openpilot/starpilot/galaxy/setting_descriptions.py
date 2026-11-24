@@ -107,7 +107,7 @@ DESCRIPTIONS = {
   'UseVOACC': ('Use vision-only adaptive cruise control instead of radar-assisted lead detection. ' +
                'Requires StarPilot longitudinal control. Applies next drive; radar faults and safety checks remain active.'),
   'ToyotaRadarMode': ('Keeps the Continental radar as a lead source with Alpha Long and adds the radar’s own collision ' +
-    'alarm as a forward collision warning. Experimental: if the radar stops transmitting, openpilot disengages.'),
+    'alarm as a forward collision warning. Experimental: if the radar stops transmitting, it drops back to vision-only.'),
   'ToyotaAutoHold': ('Holds the brakes after you press the brake for over one second at a complete stop ' +
     'with cruise main on and cruise disengaged. Press the accelerator to release.'),
   'GMPedalLongitudinal': 'Uses a detected compatible pedal interceptor for StarPilot acceleration control.',

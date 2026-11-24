@@ -9,8 +9,10 @@ Copyright (c) 2026 ARS510 radar contributors. MIT license; see THIRD_PARTY_NOTIC
 from math import nan
 
 from opendbc.can import CANParser
+from opendbc.car.carlog import carlog
 from opendbc.car.structs import RadarData
 from opendbc.car.interfaces import RadarInterfaceBase
+from opendbc.car.toyota.values import ToyotaFlags
 
 RADAR_DBC = "toyota_tss2_ars510"
 TARGET_ADDRS = {0x235, 0x237, 0x239}
@@ -37,6 +39,11 @@ class RadarInterface(RadarInterfaceBase):
     self.last_record_t = None
     self.lat_wrapped = False
     self.fault = 0  # consecutive cycles with the radar's fault flag (0x196 byte 1 bit 0) set
+    # Alpha Long opt-in (ToyotaRadarMode): DISABLE_RADAR is set and the receiver is on only by the user's choice. Without it
+    # 7.0 drives vision-only, so here the radar is an extra lead source: a silent, faulted or invalid radar bus drops back to
+    # no points (vision-only) instead of raising radar errors, which selfdrived turns into a soft disable.
+    self.advisory = bool(int(CP.flags) & ToyotaFlags.DISABLE_RADAR)
+    self.degraded_reason = None
 
   def update(self, can_strings):
     self.frame += 1
@@ -57,7 +64,8 @@ class RadarInterface(RadarInterfaceBase):
       if t is None or self.frame % 5 != 0 or (self.last_record_t is not None and t - self.last_record_t <= 0.5):
         return None
       ret = RadarData()
-      ret.errors.radarUnavailableTemporary = self.last_record_t is not None
+      if self.last_record_t is not None:
+        self._error(ret, "silent", "radarUnavailableTemporary")
       return ret
 
     self.cycle = cycle
@@ -65,11 +73,12 @@ class RadarInterface(RadarInterfaceBase):
     self.last_record_t = t
     ret = RadarData()
     if not self.rcp.can_valid:
-      ret.errors.canError = True
+      self._error(ret, "can_invalid", "canError")
       return ret
     if self.fault >= 2:
-      ret.errors.radarUnavailableTemporary = True
+      self._error(ret, "fault", "radarUnavailableTemporary")
       return ret
+    self._set_degraded(None)
 
     target, position = self.rcp.vl["ACC_TARGET_1"], self.rcp.vl["ACC_TARGET_2"]
     if target["STATE"] == 5 and position["PRESENT"]:
@@ -82,3 +91,16 @@ class RadarInterface(RadarInterfaceBase):
       pt.deprecated.measured = True
       ret.points = [pt]
     return ret
+
+  def _error(self, ret, reason: str, error: str) -> None:
+    """Report a radar error, or in advisory mode return no points (vision-only) and log the change once."""
+    if self.advisory:
+      self._set_degraded(reason)
+    else:
+      setattr(ret.errors, error, True)
+
+  def _set_degraded(self, reason: str | None) -> None:
+    if self.advisory and reason != self.degraded_reason:
+      # error level reaches errorLogMessage, which is kept in qlogs (uploaded automatically)
+      carlog.error({"event": "ars510_radar_degraded", "reason": reason, "previous": self.degraded_reason})
+      self.degraded_reason = reason

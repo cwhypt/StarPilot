@@ -106,7 +106,8 @@ BOOL_DEFAULTS = {
   "SubaruSNG": False,
   "SubaruRedneckCruise": False,
   "RedneckCruise": False,
-  "ReverseCruise": False, "ToyotaAutoHold": False, "SNGHack": False, "ToyotaRadarMode": False, "JeepBrakeHold": False, "VoltSNG": False, "GMAutoHold": False, "VoltOnePedalMode": False,
+  "ReverseCruise": False, "ToyotaAutoHold": False, "SNGHack": False, "ToyotaRadarMode": False, "JeepBrakeHold": False,
+  "VoltSNG": False, "GMAutoHold": False, "VoltOnePedalMode": False,
   "RemapCancelToDistance": False, "LongPitch": True, "DisableOpenpilotLongitudinal": False,
   "SpeedLimitController": False, "ShowSpeedLimits": True,
   "SLCOnEngage": False,
@@ -978,7 +979,7 @@ class FeatureSettingsOwner:
                              configurable and parked and self.authority("parked_preferences"),
                              "Keeps the Continental radar as a lead source while Alpha Long disables its factory output, and adds " +
                              "the radar's own collision alarm as an FCW. Only has an effect with Alpha Long. If the radar stops " +
-                             "transmitting, openpilot disengages. Applies after the next startup.")
+                             "transmitting, it drops back to vision-only. Applies after the next startup.")
         rows.append(replace(row, available=row.available and self._readable("ToyotaRadarMode"), capability=radar_capability))
       jeep_capability = self._jeep_hold_capability()
       if jeep_capability is not None:

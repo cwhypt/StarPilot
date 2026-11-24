@@ -17,7 +17,7 @@
 | 文件 | 内容 |
 |---|---|
 | `opendbc/dbc/toyota_tss2_ars510.dbc` | 旧分支版本：`TARGET_ID` 6 bit；PCS_STATE(0x100)、EVENT_STATE(0x196) 等 |
-| `car/toyota/ars510_acc_target.py` | LAT_DIST 回绕修复（校验字节 CRC）；0x196 故障位连续 ≥2 周期 → `radarUnavailableTemporary`；点字段改为 7.0 的 `pt.deprecated.*` |
+| `car/toyota/ars510_acc_target.py` | LAT_DIST 回绕修复（校验字节 CRC）；0x196 故障位连续 ≥2 周期 → `radarUnavailableTemporary`（开启本选项时改为退回纯视觉，见第 5 节）；点字段改为 7.0 的 `pt.deprecated.*` |
 | `car/toyota/ars510_preferences.py` | `configure_radar(cp, alpha_long_radar=False)`；`radar_pcs_fcw(cp)` |
 | `starpilot/vehicle_preferences.py` | 读取 `ToyotaRadarMode` ∈ {1,2} → `toyota_radar_alpha_long`，传给两处 `configure_radar` |
 | `car/toyota/carstate.py` | `Bus.radar` 的 PCS_STATE 可选解析器（频率 nan，缺失不影响 canValid）、`update_radar_pcs_alarm` |
@@ -62,6 +62,7 @@
 - **radard 的 `aRel` 没做**：Mode 1 的点不带 `aRel`（NaN），要用就得改成读雷达 REL_ACCEL 并换算成前车加速度，会改变跟车行为，没有回放数据先不动。
 
 - RAV4 **2022**（力矩控制）+ Alpha Long + 本选项：7.0 的 AOL 资格检查对这个组合直接判不合格（现有测试明确断言），本选项会让该车失去 7.0 的 AOL 力矩路径。2023（角度控制，本车）不受影响。
+- **雷达断开不会退出控制**：开启本选项（`DISABLE_RADAR` + `ARS510_RADAR`）时，接收器把雷达当作 7.0 纯视觉基线之上的附加前车来源：雷达私有总线中途停发、周期时钟卡住（> 0.5 s）、故障位连续 ≥ 2 周期、或 `can_valid` 为假，都只是不再输出点（radarTracks 照常发布、不带错误位），不会再触发 `radarTempUnavailable` / `radarFault` 的 SOFT_DISABLE 或 NO_ENTRY。状态切换时记一行 `{"event": "ars510_radar_degraded", "reason": "silent" | "fault" | "can_invalid" | null}`（进 qlog）；雷达恢复后自动恢复。总线完全静默 15 s 仍会显示一次 `radarNoData` 提示。不开本选项（原车纵向或装了雷达 CAN 过滤器）时，7.0 的雷达错误处理不变。
 - **V2 未回答**：Alpha Long 下雷达私有总线（0x100/0x196/0x235…）是否还在发，仍需上车看 `check_t2_radar_fcw.py` / `probe_required_decel.py`。不在发时：ACC 目标静默退化成纯视觉，T2 永不触发（不报错）。
 - T2 只告警不刹车；PCS_ALARM 语义来自 ars510 作者记录，待实车验证。
 
