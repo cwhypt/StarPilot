@@ -2,8 +2,9 @@
 and taken back once the wheel has settled and the driver lets go."""
 import pytest
 
-from opendbc.car.toyota.carcontroller import (LTA_RELEASE_MARGIN, LTA_RESUME_FRAMES, LTA_RESUME_MARGIN, LTA_RESUME_MAX_RATE,
-                                              lta_angle_in_range)
+from opendbc.car.toyota.carcontroller import (LTA_RELEASE_MARGIN, LTA_RESUME_DRIVER_TORQUE, LTA_RESUME_FAR_FRAMES,
+                                              LTA_RESUME_FRAMES, LTA_RESUME_MARGIN, LTA_RESUME_MAX_RATE,
+                                              LTA_RESUME_TARGET_ERR, lta_angle_in_range)
 from opendbc.car.toyota.tests.test_auto_hold import decode, setup_hold, step_hold
 from opendbc.car.toyota.values import CAR, CarControllerParams, STEER_THRESHOLD
 
@@ -60,9 +61,9 @@ def test_controller_releases_lta_out_of_range_and_follows_the_wheel(car):
   state.out.steeringAngleDeg, state.out.steeringRateDeg = 120., -200.
   assert lta_frames(controller, command, state, cp)['STEER_REQUEST'] == 0
 
-  # settled at 30 deg: taken back after the resume delay, starting from the wheel angle
+  # settled at 30 deg with the target at 80 deg: taken back after the longer resume delay, starting from the wheel angle
   state.out.steeringAngleDeg, state.out.steeringRateDeg = 30., 0.
-  requests = [lta_frames(controller, command, state, cp) for _ in range(LTA_RESUME_FRAMES // 2 + 2)]
+  requests = [lta_frames(controller, command, state, cp) for _ in range(LTA_RESUME_FAR_FRAMES // 2 + 2)]
   assert requests[0]['STEER_REQUEST'] == 0 and requests[-1]['STEER_REQUEST'] == 1
   first = next(r for r in requests if r['STEER_REQUEST'])
   assert abs(first['STEER_ANGLE_CMD'] - 30.) < 1.
@@ -95,9 +96,35 @@ def test_controller_releases_lta_when_driver_overpowers_it(car):
   for _ in range(LTA_RESUME_FRAMES):
     assert lta_frames(controller, command, state, cp)['STEER_REQUEST'] == 0
 
-  # driver lets go: taken back after the resume delay, from the wheel angle
+  # driver lets go with the target (20 deg) far from the wheel (45 deg): taken back after the longer delay, from the
+  # wheel angle
   state.out.steeringTorque = 0.
-  requests = [lta_frames(controller, command, state, cp) for _ in range(LTA_RESUME_FRAMES // 2 + 2)]
-  assert requests[0]['STEER_REQUEST'] == 0 and requests[-1]['STEER_REQUEST'] == 1
+  requests = [lta_frames(controller, command, state, cp) for _ in range(LTA_RESUME_FAR_FRAMES // 2 + 2)]
+  assert not any(r['STEER_REQUEST'] for r in requests[:LTA_RESUME_FAR_FRAMES // 2 - 1])
+  assert requests[-1]['STEER_REQUEST'] == 1
   first = next(r for r in requests if r['STEER_REQUEST'])
   assert abs(first['STEER_ANGLE_CMD'] - 45.) < 1.5
+
+
+def test_resume_needs_relaxed_hands_and_waits_longer_when_the_target_is_far():
+  # hand resting on the wheel below the override threshold: no resume at all
+  in_range, frames = False, 0
+  for _ in range(LTA_RESUME_FAR_FRAMES * 2):
+    in_range, frames = lta_angle_in_range(10., 0., in_range, frames, MAX, driver_torque=LTA_RESUME_DRIVER_TORQUE + 10,
+                                          target_error=0.)
+  assert not in_range
+  # relaxed hands, target close to the wheel: the short delay
+  in_range, frames = False, 0
+  for _ in range(LTA_RESUME_FRAMES):
+    in_range, frames = lta_angle_in_range(10., 0., in_range, frames, MAX, driver_torque=10., target_error=LTA_RESUME_TARGET_ERR - 1)
+  assert in_range
+  # relaxed hands, target far from the wheel (recorded tug of war: model 15 deg, driver holding 0): the long delay
+  in_range, frames = False, 0
+  for _ in range(LTA_RESUME_FAR_FRAMES):
+    assert not in_range
+    in_range, frames = lta_angle_in_range(0., 0., in_range, frames, MAX, driver_torque=-30., target_error=15.)
+  assert in_range
+  # a push in between restarts the count
+  in_range, frames = False, LTA_RESUME_FAR_FRAMES - 1
+  in_range, frames = lta_angle_in_range(0., 0., in_range, frames, MAX, driver_torque=-80., target_error=15.)
+  assert (in_range, frames) == (False, 0)

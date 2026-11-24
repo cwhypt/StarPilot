@@ -80,17 +80,27 @@ LTA_RESUME_FRAMES = 20      # ... for 0.2 s (100 Hz)
 # steering-pressed threshold and the wheel more than LTA_OVERRIDE_ANGLE_ERR from the command); that was
 # 0.15-0.5 s before each fault.
 LTA_OVERRIDE_ANGLE_ERR = 10.  # deg between measured wheel angle and the last LTA command
+# Taking LTA back while the driver still rests a hand on the wheel, with the model target far from where the driver
+# holds it, starts a tug of war: the command ramps toward the target, the driver pushes back past the override
+# threshold and LTA is released again (5 times in 6 s on RAV4 drive 0a, t=360 s). Resume only once the hands are
+# relaxed, and wait longer unless the target is close to the wheel angle.
+LTA_RESUME_DRIVER_TORQUE = 50.  # below STEER_THRESHOLD: hands relaxed, not just under the override threshold
+LTA_RESUME_TARGET_ERR = 5.      # deg: target this close to the wheel resumes after LTA_RESUME_FRAMES ...
+LTA_RESUME_FAR_FRAMES = 60      # ... otherwise after 0.6 s of relaxed hands
 
 
-def lta_angle_in_range(angle, rate, in_range, resume_frames, angle_max, driver_override=False, driver_pressing=False):
+def lta_angle_in_range(angle, rate, in_range, resume_frames, angle_max, driver_override=False, driver_pressing=False,
+                       driver_torque=0., target_error=0.):
   """Hysteresis on the measured wheel angle and driver override: (in_range, resume_frames)."""
   if abs(angle) > angle_max + LTA_RELEASE_MARGIN or driver_override:
     return False, 0
   if in_range:
     return True, 0
-  if abs(angle) < angle_max - LTA_RESUME_MARGIN and abs(rate) < LTA_RESUME_MAX_RATE and not driver_pressing:
+  if (abs(angle) < angle_max - LTA_RESUME_MARGIN and abs(rate) < LTA_RESUME_MAX_RATE and not driver_pressing and
+      abs(driver_torque) < LTA_RESUME_DRIVER_TORQUE):
     resume_frames += 1
-    return resume_frames >= LTA_RESUME_FRAMES, resume_frames
+    needed = LTA_RESUME_FRAMES if abs(target_error) < LTA_RESUME_TARGET_ERR else LTA_RESUME_FAR_FRAMES
+    return resume_frames >= needed, resume_frames
   return False, 0
 
 
@@ -301,9 +311,12 @@ class CarController(CarControllerBase):
       measured_angle = CS.out.steeringAngleDeg + CS.out.steeringAngleOffsetDeg
       driver_pressing = abs(CS.out.steeringTorque) > STEER_THRESHOLD
       driver_override = driver_pressing and abs(measured_angle - self.last_angle) > LTA_OVERRIDE_ANGLE_ERR
+      angle_max = self.params.ANGLE_LIMITS.STEER_ANGLE_MAX
+      target_error = float(np.clip(actuators.steeringAngleDeg + CS.out.steeringAngleOffsetDeg, -angle_max, angle_max)) - measured_angle
       self.lta_in_range, self.lta_resume_frames = lta_angle_in_range(
         measured_angle, CS.out.steeringRateDeg, self.lta_in_range,
-        self.lta_resume_frames, self.params.ANGLE_LIMITS.STEER_ANGLE_MAX, driver_override, driver_pressing)
+        self.lta_resume_frames, angle_max, driver_override, driver_pressing,
+        CS.out.steeringTorque, target_error)
       if self.frame % 2 == 0:
         # EPS uses the torque sensor angle to control with, offset to compensate
         apply_angle = actuators.steeringAngleDeg + CS.out.steeringAngleOffsetDeg
