@@ -70,6 +70,24 @@ def get_long_tune(CP, params):
                        rate=1 / (DT_CTRL * 3))
 
 
+LTA_RELEASE_MARGIN = 5.     # deg past STEER_ANGLE_MAX: release LTA
+LTA_RESUME_MARGIN = 15.     # deg inside STEER_ANGLE_MAX: may take LTA back ...
+LTA_RESUME_MAX_RATE = 100.  # deg/s ... once the wheel has settled ...
+LTA_RESUME_FRAMES = 20      # ... for 0.2 s (100 Hz)
+
+
+def lta_angle_in_range(angle, rate, in_range, resume_frames, angle_max):
+  """Hysteresis on the measured wheel angle: (in_range, resume_frames)."""
+  if abs(angle) > angle_max + LTA_RELEASE_MARGIN:
+    return False, 0
+  if in_range:
+    return True, 0
+  if abs(angle) < angle_max - LTA_RESUME_MARGIN and abs(rate) < LTA_RESUME_MAX_RATE:
+    resume_frames += 1
+    return resume_frames >= LTA_RESUME_FRAMES, resume_frames
+  return False, 0
+
+
 class CarController(CarControllerBase):
   def __init__(self, dbc_names, CP):
     super().__init__(dbc_names, CP)
@@ -84,6 +102,8 @@ class CarController(CarControllerBase):
     self.params = CarControllerParams(self.CP)
     self.last_torque = 0
     self.last_angle = 0
+    self.lta_in_range = True
+    self.lta_resume_frames = 0
     self.alert_active = False
     self.standstill_req = False
     self.sng_hack = False
@@ -268,6 +288,13 @@ class CarController(CarControllerBase):
       # If using LTA control, disable LKA and set steering angle command
       apply_torque = 0
       apply_steer_req = False
+      # The EPS only controls within +/-STEER_ANGLE_MAX. When the driver turns the wheel well past that (a tight turn) and
+      # then lets it unwind with LTA still requested, the EPS sets LTA_STATE 9 (temporary fault) and "Steering Assist
+      # Temporarily Unavailable" pops up (12 times on one recorded RAV4 drive). Release LTA while the wheel is out of range
+      # and take it back once it is inside the range and settled; the command follows the wheel meanwhile.
+      self.lta_in_range, self.lta_resume_frames = lta_angle_in_range(
+        CS.out.steeringAngleDeg + CS.out.steeringAngleOffsetDeg, CS.out.steeringRateDeg, self.lta_in_range,
+        self.lta_resume_frames, self.params.ANGLE_LIMITS.STEER_ANGLE_MAX)
       if self.frame % 2 == 0:
         # EPS uses the torque sensor angle to control with, offset to compensate
         apply_angle = actuators.steeringAngleDeg + CS.out.steeringAngleOffsetDeg
@@ -275,7 +302,7 @@ class CarController(CarControllerBase):
         # Angular rate limit based on speed
         self.last_angle = apply_std_steer_angle_limits(apply_angle, self.last_angle, CS.out.vEgoRaw,
                                                        CS.out.steeringAngleDeg + CS.out.steeringAngleOffsetDeg,
-                                                       CC.latActive, self.params.ANGLE_LIMITS)
+                                                       CC.latActive and self.lta_in_range, self.params.ANGLE_LIMITS)
 
     self.last_torque = apply_torque
 
@@ -297,7 +324,7 @@ class CarController(CarControllerBase):
 
     # STEERING_LTA does not seem to allow more rate by sending faster, and may wind up easier
     if self.frame % 2 == 0 and self.CP.flags & ToyotaFlags.TSS2:
-      lta_active = lat_active and self.CP.steerControlType == SteerControlType.angle
+      lta_active = lat_active and self.CP.steerControlType == SteerControlType.angle and self.lta_in_range
       # cut steering torque with TORQUE_WIND_DOWN when either EPS torque or driver torque is above
       # the threshold, to limit max lateral acceleration and for driver torque blending respectively.
       full_torque_condition = (abs(CS.out.steeringTorqueEps) < self.params.STEER_MAX and
