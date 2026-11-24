@@ -20,7 +20,7 @@ def compose(cp, parsed, state, message, *, car_state_stamp):
   return write_stop_sign(parsed, state, message, car_state_stamp=car_state_stamp)
 
 
-def write_stop_sign(parsed, state, message, *, car_state_stamp):
+def write_stop_sign(parsed, state, message, *, car_state_stamp, max_age_ns=MAX_AGE_NS):
   if message is None:
     message = messaging.new_message('starpilotCarState', valid=bool(state.canValid), logMonoTime=car_state_stamp)
     message.starpilotCarState.sourceCarStateMonoTime = car_state_stamp
@@ -34,6 +34,6 @@ def write_stop_sign(parsed, state, message, *, car_state_stamp):
       type(observation[1]) is int and 0 <= after - before <= 1_000_000 and state.canValid and not state.canTimeout):
     age = boot - observation[1]
     stamp = before - age
-    if 0 <= age <= MAX_AGE_NS and 0 < stamp <= car_state_stamp:
+    if 0 <= age <= max_age_ns and 0 < stamp <= car_state_stamp:
       message.starpilotCarState.dashboardStopSign = int(observation[0])
   return message

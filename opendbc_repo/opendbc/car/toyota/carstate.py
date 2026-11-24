@@ -15,6 +15,9 @@ from opendbc.can.dbc import DBC as CANDBC
 from opendbc.car.toyota.prius_longitudinal import configured as prius_filter_configured
 from opendbc.car.toyota.rav4h_filter import Rav4hCANParser, configured as rav4h_filter_configured
 from opendbc.car.toyota.values import ToyotaFlags, CAR, DBC, STEER_THRESHOLD, EPS_SCALE, uses_toyota_auto_hold_aeb
+
+# platforms whose Road Sign Assist stop sign field (RSA1.TSGN1_AUX) has been observed on recorded drives
+RSA_STOP_SIGN_CARS = frozenset({CAR.TOYOTA_RAV4_TSS2_2023})
 from opendbc.car.toyota.ars510_preferences import radar_pcs_fcw
 from opendbc.car.carlog import carlog
 
@@ -71,6 +74,7 @@ class CarState(CarStateBase):
     self.accurate_steer_angle_seen = False
     self.angle_offset = FirstOrderFilter(None, 60.0, DT_CTRL, initialized=False)
     self.dashboard_limit = LimitTracker()
+    self.dashboard_stop_sign = None
 
     self.pedal_ready = False
     self.lkas_button = 0
@@ -359,6 +363,13 @@ class CarState(CarStateBase):
       speed = int(cp_cam.vl["RSA1"]["SPDVAL1"])
       status, value_mps = toyota_sign(sign, speed)
       self.dashboard_limit.update(timestamp, status, value_mps, valid_until_ns=expiry)
+    # Road Sign Assist stop sign (undocumented TSGN1_AUX = 5, see the DBC). Optional observation for StarPilot's stop
+    # handling, never a control grant; only on the platform it was observed on. RSA1 is sent about once a second.
+    self.dashboard_stop_sign = None
+    if self.CP.carFingerprint in RSA_STOP_SIGN_CARS:
+      stamp = cp_cam.ts_nanos.get("RSA1", {}).get("TSGN1_AUX", 0)
+      if stamp > 0:
+        self.dashboard_stop_sign = (int(cp_cam.vl["RSA1"]["TSGN1"]) == 0 and int(cp_cam.vl["RSA1"]["TSGN1_AUX"]) == 5, stamp)
     return ret
 
   def update_radar_bus_silence(self, cp_radar) -> bool:

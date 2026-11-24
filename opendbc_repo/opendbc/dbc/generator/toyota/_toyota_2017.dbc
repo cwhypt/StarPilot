@@ -324,6 +324,7 @@ BO_ 1161 RSA1: 8 FCM
  SG_ TSGN1 : 7|8@0+ (1,0) [0|0] "" XXX
  SG_ TSGNGRY1 : 12|3@0+ (1,0) [0|0] "" XXX
  SG_ TSGNHLT1 : 9|2@0+ (1,0) [0|0] "" XXX
+ SG_ TSGN1_AUX : 15|3@0+ (1,0) [0|7] "" XXX
  SG_ SPDVAL1 : 23|8@0+ (1,0) [0|0] "km/h" XXX
  SG_ SPLSGN1 : 31|4@0+ (1,0) [0|0] "" XXX
  SG_ SPLSGN2 : 27|4@0+ (1,0) [0|0] "" XXX
@@ -564,7 +565,9 @@ VAL_ 1042 LDA_FRONT_CAMERA_BLOCKED 1 "lda unavailable" 0 "ok";
 VAL_ 1042 TAKE_CONTROL 1 "take control" 0 "ok";
 VAL_ 1042 LANE_SWAY_WARNING 3 "ok" 2 "orange please take a break" 1 "prompt would you like to take a break" 0 "ok";
 VAL_ 1042 LANE_SWAY_BUZZER 3 "ok" 2 "beep twice" 1 "beep twice" 0 "ok";
+CM_ SG_ 1161 TSGN1_AUX "Undocumented. 2025 RAV4 Hybrid (TSS 2.5, US) sets 5 (byte 1 = 0xA0, TSGN1 = 0) while a stop sign is recognized; seen at stop signs on two drives and at no other time on them.";
 VAL_ 1161 TSGN1 1 "speed sign" 0 "none";
+VAL_ 1161 TSGN1_AUX 5 "stop sign" 0 "none";
 VAL_ 1161 TSGN2 1 "speed sign" 0 "none";
 VAL_ 1161 SPLSGN2 15 "conditional blank" 4 "wet road" 5 "rain" 0 "none";
 VAL_ 1162 TSGN3 0 "none" 1 "speed sign" 2 "0 unlimited" 7 "unlimited" 16 "highway" 17 "no highway" 18 "motorway" 19 "no motorway" 20 "in city" 21 "outside city" 22 "pedestrian area" 23 "no pedestrian area" 65 "no overtaking left" 66 "no overtaking right" 67 "overtaking allowed again" 81 "no right turn" 97 "stop" 105 "yield" 113 "stop" 114 "yield us" 129 "no entry" 138 "no entry tss2" 145 "do not enter";
