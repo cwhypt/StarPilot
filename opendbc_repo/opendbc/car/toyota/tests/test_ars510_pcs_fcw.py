@@ -146,6 +146,9 @@ def test_carstate_reports_the_radar_alarm_as_stock_fcw(tmp_path):
 def test_radar_bus_silence_after_15_s_and_recovery(tmp_path):
   from opendbc.car.toyota.carstate import RADAR_SILENT_FRAMES
   drive = Drive(get_params(tmp_path))
+  drive.t += DT_NANOS
+  drive.cp_radar.update([(drive.t, [(PCS_STATE, pcs_frame(0), 1)])])
+  assert drive.CS.update_radar_bus_silence(drive.cp_radar) is False
   silent = []
   for _ in range(RADAR_SILENT_FRAMES):
     drive.t += DT_NANOS
@@ -196,3 +199,28 @@ def test_radar_no_data_alert_is_shown_once_for_ten_seconds(tmp_path):
   assert all(shown[:RADAR_NO_DATA_ALERT_FRAMES]) and not any(shown[RADAR_NO_DATA_ALERT_FRAMES:])
   # without the opt-in the field is never set and the alert never shows
   assert EventName.radarNoData not in names(CarEvents(get_params(tmp_path, mode=0)), silent)
+
+
+def test_startup_silence_before_the_first_frame_gets_a_longer_window(tmp_path):
+  from opendbc.car.toyota.carstate import RADAR_NEVER_SEEN_FRAMES, RADAR_SILENT_FRAMES
+  drive = Drive(get_params(tmp_path))
+  silent = []
+  for _ in range(RADAR_NEVER_SEEN_FRAMES):
+    drive.t += DT_NANOS
+    drive.cp_radar.update([(drive.t, [])])
+    silent.append(drive.CS.update_radar_bus_silence(drive.cp_radar))
+  assert not any(silent[:RADAR_SILENT_FRAMES * 2]) and not any(silent[:-1]) and silent[-1]
+
+
+def test_idle_required_decel_code_is_not_an_event(tmp_path, monkeypatch):
+  from opendbc.car.toyota import carstate
+  logged = []
+  monkeypatch.setattr(carstate.carlog, "error", logged.append)
+  drive = Drive(get_params(tmp_path))
+  packer = CANPacker(ARS510_DBC)
+  for _ in range(300):  # what the radar sends almost all the time under Alpha Long: ACC car in EVENT_OBJECT, code -1
+    drive.t += DT_NANOS
+    frames = [packer.make_can_msg("EVENT_OBJECT", 1, {"OBJECT_DIST": 40.}), packer.make_can_msg("EVENT_STATE", 1, {"REQUIRED_DECEL": -0.095})]
+    drive.cp_radar.update([(drive.t, frames)])
+    drive.CS.update_required_decel_log(drive.cp_radar, 15.0)
+  assert drive.CS.required_decel_event is None and logged == []

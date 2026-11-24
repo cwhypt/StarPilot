@@ -173,7 +173,9 @@ def probe(msgs) -> Result:
             res.fault_frames += int(value(dat, SIG["fault"]) > 0)
             moving = v_ego > 1.0
             res.moving_frames += int(moving)
-            active = obj["obj_dist"] > 0 or req_raw != 0
+            # raw 255 (code -1, -0.095 m/s^2) is the idle value on the recorded RAV4 radar, and OBJECT_DIST stays filled
+            # under Alpha Long, so only a REQUIRED_DECEL code below -1 is an active event
+            active = req_raw not in (0, 255)
             bucket = res.req_values if active else res.idle_req_values
             bucket[str(req_raw)] = bucket.get(str(req_raw), 0) + 1
             if active:

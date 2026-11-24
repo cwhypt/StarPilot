@@ -37,6 +37,11 @@ ARS510_DBC = "toyota_tss2_ars510"
 PCS_STATE_TIMEOUT_FRAMES = 50  # PCS_STATE is 10 Hz; drop a held alarm after 0.5 s without a frame
 # carstate runs at 100 Hz. The radar takes several seconds to boot, so only call the bus silent after 15 s without a frame.
 RADAR_SILENT_FRAMES = 1500
+# Before the first radar frame of a drive allow longer: on a recorded RAV4 drive (Alpha Long) the radar bus stayed quiet
+# for over 15 s after card started while the radar was being disabled, then came up normally.
+RADAR_NEVER_SEEN_FRAMES = 6000
+# REQUIRED_DECEL code -1 (-0.095 m/s^2) is this radar's idle value (99.4 % of a recorded drive); real requests were <= -0.67
+REQUIRED_DECEL_IDLE = -0.1
 RADAR_BUS_MESSAGES = ("PCS_STATE", "ACC_TARGET_3", "EVENT_OBJECT", "EVENT_STATE")
 
 
@@ -358,14 +363,16 @@ class CarState(CarStateBase):
 
   def update_radar_bus_silence(self, cp_radar) -> bool:
     """True after RADAR_SILENT_FRAMES without any radar-bus frame: the ARS510 receiver and T2 then have nothing to work with."""
-    was_silent = self.radar_silent_frames >= RADAR_SILENT_FRAMES
+    limit = RADAR_SILENT_FRAMES if self.radar_frames_seen else RADAR_NEVER_SEEN_FRAMES
+    was_silent = self.radar_silent_frames >= limit
     if any(len(cp_radar.vl_all[msg][sig]) for msg, sig in zip(RADAR_BUS_MESSAGES, ("PCS_ALARM", "TIMESTAMP", "OBJECT_DIST", "REQUIRED_DECEL"),
                                                                 strict=True)):
       self.radar_silent_frames = 0
       self.radar_frames_seen += 1
     else:
-      self.radar_silent_frames = min(self.radar_silent_frames + 1, RADAR_SILENT_FRAMES)
-    silent = self.radar_silent_frames >= RADAR_SILENT_FRAMES
+      self.radar_silent_frames = min(self.radar_silent_frames + 1, RADAR_NEVER_SEEN_FRAMES)
+    limit = RADAR_SILENT_FRAMES if self.radar_frames_seen else RADAR_NEVER_SEEN_FRAMES
+    silent = self.radar_silent_frames >= limit
     if silent != was_silent:
       # error level reaches errorLogMessage, which is kept in qlogs (uploaded automatically)
       carlog.error({"event": "ars510_radar_bus", "silent": silent, "frames_seen_before": self.radar_frames_seen})
@@ -382,7 +389,9 @@ class CarState(CarStateBase):
         if ev["stale"] > 50:  # 0.5 s with no 0x195/0x196 frame: close it
           self._close_required_decel_event()
       return
-    active = any(d > 0 for d in dists) or any(r != 0 for r in reqs)
+    # OBJECT_DIST is filled continuously under Alpha Long (the event object follows the ACC car), so only a real
+    # REQUIRED_DECEL value below the idle code marks an event
+    active = any(r < REQUIRED_DECEL_IDLE for r in reqs)
     ev = self.required_decel_event
     if active:
       if ev is None:
