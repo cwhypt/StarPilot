@@ -54,3 +54,5 @@
 - **LTA 拉扯（5:56–6:02）**：驾驶员保持直行、模型要 +15°，释放后 0.2 s 就接回，6 s 内反复 5 次。
 
 对应修改（本次提交）：CEM 在最后一次 stop 证据后保持 Experimental 4 s；LTA 接回需手完全放松（|扭矩| < 50），目标离方向盘 > 5° 时等待 0.6 s；12 m/s 以下放宽 LTA 角速度上限（opendbc 与 panda 安全固件同步），使低速转弯能用满 ±94.95°；RAV4 2025 的 RSA1 停车标志（`TSGN1_AUX` = 5）接入 `starpilotCarState.dashboardStopSign`，供 Force Stop 使用。
+
+**移植说明（update-9）**：上面四项中，"12 m/s 以下放宽 LTA 角速度上限"（原补丁 0003）**没有合入**。它同时改了 `CarControllerParams.ANGLE_LIMITS`（Python）和 panda 安全固件 `toyota.h` 的 `TOYOTA_ANGLE_STEERING_LIMITS`（C）。设备上的分支带预编译 panda 固件（`panda/board/obj/*.bin.signed`），`git am` 只改源码，不重新编译、不刷固件：panda 仍按旧上限（≤5 m/s 时 0.3 / 0.36°/步）检查，openpilot 按新上限发出的 LTA 指令会被 panda 拦截，EPS 收不到指令会报故障。要做这项，需要先确认能在设备上编译并刷写 panda 固件（签名、bootstub 是否接受），并在刷写后核对 panda 的固件签名，单独作为一次更新。
