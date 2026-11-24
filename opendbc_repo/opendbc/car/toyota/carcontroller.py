@@ -13,7 +13,7 @@ from opendbc.car.toyota import (dom_defaults, prius_longitudinal, rav4h_filter, 
                                 advert_filter, legacy_stop_timer, legacy_advert_filter)
 from opendbc.car.toyota import pedal_composite, camera_2aa_filter, prius_sdsu, prius_advert_filter
 from opendbc.car.toyota.door_locks import DoorLocks
-from opendbc.car.toyota.values import CAR, CarControllerParams, ToyotaFlags, TOYOTA_AUTO_HOLD_CARS, uses_toyota_auto_hold_aeb
+from opendbc.car.toyota.values import CAR, CarControllerParams, ToyotaFlags, TOYOTA_AUTO_HOLD_CARS, STEER_THRESHOLD, uses_toyota_auto_hold_aeb
 from opendbc.can import CANPacker
 from opendbc.safety import ALTERNATIVE_EXPERIENCE
 
@@ -74,15 +74,21 @@ LTA_RELEASE_MARGIN = 5.     # deg past STEER_ANGLE_MAX: release LTA
 LTA_RESUME_MARGIN = 15.     # deg inside STEER_ANGLE_MAX: may take LTA back ...
 LTA_RESUME_MAX_RATE = 100.  # deg/s ... once the wheel has settled ...
 LTA_RESUME_FRAMES = 20      # ... for 0.2 s (100 Hz)
+# The EPS also faults (LTA_STATE 25 -> 9) when the driver turns the wheel quickly against an active LTA command:
+# on a recorded RAV4 drive this happened three times with 120-200 driver torque, >100 deg/s and the wheel
+# 30-60 deg away from the command. Release as soon as the driver is clearly winning (torque above the
+# steering-pressed threshold and the wheel more than LTA_OVERRIDE_ANGLE_ERR from the command); that was
+# 0.15-0.5 s before each fault.
+LTA_OVERRIDE_ANGLE_ERR = 10.  # deg between measured wheel angle and the last LTA command
 
 
-def lta_angle_in_range(angle, rate, in_range, resume_frames, angle_max):
-  """Hysteresis on the measured wheel angle: (in_range, resume_frames)."""
-  if abs(angle) > angle_max + LTA_RELEASE_MARGIN:
+def lta_angle_in_range(angle, rate, in_range, resume_frames, angle_max, driver_override=False, driver_pressing=False):
+  """Hysteresis on the measured wheel angle and driver override: (in_range, resume_frames)."""
+  if abs(angle) > angle_max + LTA_RELEASE_MARGIN or driver_override:
     return False, 0
   if in_range:
     return True, 0
-  if abs(angle) < angle_max - LTA_RESUME_MARGIN and abs(rate) < LTA_RESUME_MAX_RATE:
+  if abs(angle) < angle_max - LTA_RESUME_MARGIN and abs(rate) < LTA_RESUME_MAX_RATE and not driver_pressing:
     resume_frames += 1
     return resume_frames >= LTA_RESUME_FRAMES, resume_frames
   return False, 0
@@ -292,9 +298,12 @@ class CarController(CarControllerBase):
       # then lets it unwind with LTA still requested, the EPS sets LTA_STATE 9 (temporary fault) and "Steering Assist
       # Temporarily Unavailable" pops up (12 times on one recorded RAV4 drive). Release LTA while the wheel is out of range
       # and take it back once it is inside the range and settled; the command follows the wheel meanwhile.
+      measured_angle = CS.out.steeringAngleDeg + CS.out.steeringAngleOffsetDeg
+      driver_pressing = abs(CS.out.steeringTorque) > STEER_THRESHOLD
+      driver_override = driver_pressing and abs(measured_angle - self.last_angle) > LTA_OVERRIDE_ANGLE_ERR
       self.lta_in_range, self.lta_resume_frames = lta_angle_in_range(
-        CS.out.steeringAngleDeg + CS.out.steeringAngleOffsetDeg, CS.out.steeringRateDeg, self.lta_in_range,
-        self.lta_resume_frames, self.params.ANGLE_LIMITS.STEER_ANGLE_MAX)
+        measured_angle, CS.out.steeringRateDeg, self.lta_in_range,
+        self.lta_resume_frames, self.params.ANGLE_LIMITS.STEER_ANGLE_MAX, driver_override, driver_pressing)
       if self.frame % 2 == 0:
         # EPS uses the torque sensor angle to control with, offset to compensate
         apply_angle = actuators.steeringAngleDeg + CS.out.steeringAngleOffsetDeg
