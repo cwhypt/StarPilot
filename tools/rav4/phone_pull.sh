@@ -34,7 +34,7 @@ while [ $# -gt 0 ]; do
 done
 
 # GNU (device) / BSD (macOS) helpers
-mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0; }
+mtime() { stat -L -c %Y "$1" 2>/dev/null || stat -L -f %m "$1" 2>/dev/null || echo 0; }
 fsize() { wc -c < "$1" | tr -d ' '; }
 fmt_time() { date -d "@$1" '+%m-%d %H:%M' 2>/dev/null || date -r "$1" '+%m-%d %H:%M' 2>/dev/null || echo '?'; }
 dirbytes() { echo $(( $(du -ckL "$@" | tail -1 | cut -f1) * 1024 )); }
