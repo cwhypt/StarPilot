@@ -19,6 +19,10 @@ CEM_EXIT_BUFFER_S = 0.25
 CEM_SLOW_LEAD_HOLD_S = 1.5
 CEM_OPEN_ROAD_HANDOFF_S = 0.75
 CEM_STOP_RELEASE_SUPPRESS_S = 2.0
+# Stop-light evidence flickers on the approach (and a curve trigger can mask it). RAV4 drive 0a, t=347.8 s: the
+# detector dropped out for 2 s after a curve, Conditional went to Chill and cruise accelerated toward a red light.
+# Keep Experimental this long after the last stop evidence while moving.
+CEM_STOP_HOLD_S = 4.0
 CCM_SPEED_CONFIRM_S = 0.35
 CCM_LEAD_CONFIRM_S = 1.0
 CCM_LAUNCH_CONFIRM_S = 0.0
@@ -295,6 +299,7 @@ class ConditionalModePolicy:
     self.cem_launch_suppress_until = 0.0
     self.cem_hold_light = False
     self.cem_light_creep = False
+    self.cem_stop_until = 0.0
 
   @staticmethod
   def _decision(requested: bool, authority: Authority, qualified: bool, warm: bool, reason: Reason, status: int) -> Decision:
@@ -422,6 +427,7 @@ class ConditionalModePolicy:
       self.cem_false_since = None
       self.cem_active = False
       self.cem_stop_release_pending = False
+      self.cem_stop_until = 0.0
     # A light hold that ends while the model still asks to stop (typically a gas tap to creep closer to the line)
     # keeps Experimental: the model stops the car again where the driver lets go. Only a green light / the model
     # no longer asking to stop ends it. Stop signs keep the accelerator-means-go release.
@@ -442,7 +448,7 @@ class ConditionalModePolicy:
         self.cem_active = True
         self.cem_active_reason = Reason.CEM_STOP
         return self._decision(True, authority, True, warm, Reason.CEM_STOP, 8)
-      self.cem_hold_until = self.cem_slow_lead_until = self.cem_open_road_until = 0.0
+      self.cem_hold_until = self.cem_slow_lead_until = self.cem_open_road_until = self.cem_stop_until = 0.0
       self.cem_false_since = None
       self.cem_previous_open_road = False
       if held:
@@ -461,7 +467,13 @@ class ConditionalModePolicy:
       self.cem_active = True
       self.cem_active_reason = Reason.CEM_STOP
       return self._decision(True, authority, True, warm, Reason.CEM_STOP, 8)
-    trigger = self._cem_trigger(scene, settings, launch_suppressed=now_s < self.cem_launch_suppress_until)
+    launch_suppressed = now_s < self.cem_launch_suppress_until
+    trigger = self._cem_trigger(scene, settings, launch_suppressed=launch_suppressed)
+    if not settings.cem_stop:
+      self.cem_stop_until = 0.0
+    elif not launch_suppressed and (scene.stop_light_detected is True or scene.forcing_stop is True):
+      self.cem_stop_until = now_s + CEM_STOP_HOLD_S
+    stop_hold = trigger is None and now_s < self.cem_stop_until
     if trigger is not None:
       self.cem_hold_until = now_s + CEM_HOLD_S
       self.cem_false_since = None
@@ -485,8 +497,11 @@ class ConditionalModePolicy:
       self.cem_active_reason = Reason.CEM_OPEN_ROAD
     if slow_lead_hold and trigger is None:
       self.cem_active_reason = Reason.CEM_LEAD
+    if stop_hold:
+      self.cem_active_reason = Reason.CEM_STOP
     self.cem_active = bool(
       trigger is not None
+      or stop_hold
       or slow_lead_hold
       or open_road_hold
       or now_s < self.cem_hold_until
@@ -494,7 +509,7 @@ class ConditionalModePolicy:
       and now_s - self.cem_false_since < CEM_EXIT_BUFFER_S
     )
     self.cem_previous_open_road = trigger is Reason.CEM_OPEN_ROAD
-    reason = trigger if trigger is not None else Reason.CEM_HOLD if self.cem_active else Reason.NO_TRIGGER
+    reason = trigger if trigger is not None else Reason.CEM_STOP if stop_hold else Reason.CEM_HOLD if self.cem_active else Reason.NO_TRIGGER
     status_reason = self.cem_active_reason if self.cem_active else Reason.NO_TRIGGER
     status = {
       Reason.CEM_CURVE: 3,
