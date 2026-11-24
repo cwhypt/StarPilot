@@ -47,6 +47,11 @@ from openpilot.starpilot.lateral.lane_change_preferences import LaneChangePolicy
 
 A_CRUISE_MAX_VALS = [1.6, 1.2, 0.8, 0.6]
 A_CRUISE_MAX_BP = [0., 10.0, 25., 40.]
+# Faster Takeoffs raises the low-speed accel ceiling. It applies for this long after leaving a standstill only, so a slow
+# roll (e.g. finishing a turn at 6 mph) is not treated as a launch: on a recorded RAV4 drive that re-accelerated at
+# 2.8 m/s^2 from 6 to 17 mph right after a turn.
+TAKEOFF_WINDOW_S = 5.0
+TAKEOFF_STANDSTILL_SPEED = 0.25  # m/s
 J_CRUISE_VALS = [1.6, 1.2, 0.8, 0.6]
 A_CRUISE_MIN = -0.5
 CRUISE_ACCEL_RESPONSE_TIME = 2.0
@@ -122,6 +127,7 @@ class LongitudinalPlanner:
     self.stop_speed = tuning.get("stop_speed", .3)
     self.max_accel_override = tuning.get("max_accel")
     self.mpc = LongitudinalMpc(dt=dt)
+    self.takeoff_window_s = 0.0
     from opendbc.car.toyota.ars510_preferences import radar_pcs_fcw
     self.mpc.radar_confirmed_fcw = radar_pcs_fcw(CP)
     self.model_lead_history = ModelLeadHistory()
@@ -179,7 +185,12 @@ class LongitudinalPlanner:
     if self.plan_drive_id != drive_id:
       self.model_lead_history.clear()
     self.plan_drive_id = drive_id
-    faster_takeoffs = bool(faster_lead_takeoff)
+    car_state = sm['carState']
+    if car_state.standstill or car_state.vEgo < TAKEOFF_STANDSTILL_SPEED:
+      self.takeoff_window_s = TAKEOFF_WINDOW_S
+    else:
+      self.takeoff_window_s = max(0.0, self.takeoff_window_s - self.dt)
+    faster_takeoffs = bool(faster_lead_takeoff) and self.takeoff_window_s > 0.0
     accel_ceiling = TAKEOFF_ACCEL_MAX if faster_takeoffs else ACCEL_MAX
     if self.max_accel_override is not None:
       accel_ceiling = min(accel_ceiling, self.max_accel_override)
@@ -491,7 +502,7 @@ class LongitudinalPlanner:
       follow_seconds=float(self.mpc.params[0, 4]), mpc_target=output_a_target_mpc,
       cruise_target=self.a_cruise, model_target=output_a_target_e2e, stopping=self.output_should_stop,
       force_stop=self.force_stop_plan.forcing, traffic_mode=traffic_mode, accel_min=ACCEL_MIN)
-    if faster_lead_takeoff:
+    if faster_takeoffs:  # within the takeoff window only (see TAKEOFF_WINDOW_S)
       # Dom takeoff bypasses the standstill cruise slew, never its final bounds.
       takeoff_max = accel_ceiling if sm['selfdriveState'].experimentalMode else get_max_accel(v_ego, faster_takeoffs)
       if selected_acceleration is not None and not sm['selfdriveState'].experimentalMode:

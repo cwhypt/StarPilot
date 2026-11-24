@@ -93,3 +93,39 @@ def test_extended_takeoff_still_obeys_selected_cap_set_speed_and_cornering(speed
   straight = get_cruise_accel(*args, faster_takeoffs=True)
   curve = get_cruise_accel(False, 30., speed, 2., 180., cp, .05, 0., True, faster_takeoffs=True)
   assert curve <= straight
+
+
+def run_planner(enabled, ticks, speed, standstill):
+  cp = candidate()[1]
+  planner = LongitudinalPlanner(cp, init_v=speed)
+  out = []
+  for tick in range(ticks):
+    now = NOW + tick * 50_000_000
+    sm = Frame()
+    sm.logMonoTime = dict.fromkeys(sm, now - 5_000_000)
+    sm.recv_time = dict.fromkeys(sm, (now - 5_000_000) / 1e9)
+    sm['carState'].vEgo = 0. if standstill(tick) else speed
+    sm['carState'].standstill = standstill(tick)
+    sm['carState'].vCruise = 72.
+    sm['selfdriveState'].experimentalMode = False
+    sm['modelV2'].action.shouldStop = False
+    planner.update(sm, faster_lead_takeoff=enabled, takeoff_drive_id=DRIVE, now_ns=now, drive_id=DRIVE)
+    out.append(float(planner.output_a_target))
+  return planner, out
+
+
+def test_rolling_at_low_speed_without_a_stop_is_not_a_takeoff():
+  # e.g. finishing a turn at ~6 mph: no standstill this drive, so the normal low-speed ceiling applies
+  _, normal = run_planner(False, 60, 2.7, lambda t: False)
+  planner, faster = run_planner(True, 60, 2.7, lambda t: False)
+  assert planner.takeoff_window_s == 0.
+  assert max(faster) == pytest.approx(max(normal), abs=1e-6)
+
+
+def test_takeoff_window_opens_at_standstill_and_closes_after_five_seconds():
+  from openpilot.selfdrive.controls.lib.longitudinal_planner import TAKEOFF_WINDOW_S
+  planner, _ = run_planner(True, 10, 2.7, lambda t: t < 5)  # stopped, then 5 ticks (0.25 s) rolling
+  assert 0. < planner.takeoff_window_s < TAKEOFF_WINDOW_S
+  ticks = int(TAKEOFF_WINDOW_S / 0.05) + 10
+  planner, _ = run_planner(True, ticks, 2.7, lambda t: t < 5)
+  assert planner.takeoff_window_s == 0.
