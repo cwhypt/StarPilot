@@ -7,14 +7,16 @@
 #   bash .../phone_pull.sh --latest --time 5:40                   # newest drive, the minute around 5:40 (+-1 segment)
 #   bash .../phone_pull.sh --route 9 --segs 4-6 --content qlog    # drive #9 in the list, segments 4..6, qlogs only
 #   bash .../phone_pull.sh --list | --clean | --report
+#   DATA=~/fakecomma/data bash phone_pull.sh ...                 # rehearse on a Mac (bash 3.2 / BSD tools are fine)
 #
 # --content: video (rlog+qlog+qcamera, default) | logs (rlog+qlog) | qlog | all (+ full-res cameras)
 # --report:  also run the radar/longitudinal analysis tools on the device and put their output in the tar
 set -u
-ROOT=${ROOT:-/data/media/0/realdata}
-EXPORT=${EXPORT:-/data/export}
+DATA=${DATA:-/data}
+ROOT=${ROOT:-$DATA/media/0/realdata}
+EXPORT=${EXPORT:-$DATA/export}
 PY=/usr/local/venv/bin/python
-OP=/data/openpilot
+OP=$DATA/openpilot
 
 ROUTE_NUM=""; SEGS=""; TIME=""; CONTENT=""; REPORT=0; MODE=menu
 while [ $# -gt 0 ]; do
@@ -31,16 +33,24 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# GNU (device) / BSD (macOS) helpers
+mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0; }
+fsize() { wc -c < "$1" | tr -d ' '; }
+fmt_time() { date -d "@$1" '+%m-%d %H:%M' 2>/dev/null || date -r "$1" '+%m-%d %H:%M' 2>/dev/null || echo '?'; }
+dirbytes() { echo $(( $(du -ckL "$@" | tail -1 | cut -f1) * 1024 )); }
+space() { df -h "$EXPORT" 2>/dev/null | tail -1; }
+
 human() { awk -v b="$1" 'BEGIN{ split("B KB MB GB TB",u," "); i=1; while (b>=1024 && i<5){b/=1024;i++} printf (i==1?"%d %s":"%.1f %s"), b, u[i] }'; }
 
 if [ "$MODE" = clean ]; then
-  rm -f "$EXPORT"/*.tar; echo "removed packed files"; df -h /data | tail -1; exit 0
+  rm -f "$EXPORT"/*.tar; echo "removed packed files"; space; exit 0
 fi
 
 cd "$ROOT" 2>/dev/null || { echo "no $ROOT"; exit 1; }
 # routes ordered by their hex counter (the device clock can be wrong), newest last
-mapfile -t ROUTES < <(ls -d *--*--* 2>/dev/null | sed 's/--[0-9]*$//' | sort -u |
-                      while read -r r; do printf '%d %s\n' "$((16#${r%%--*}))" "$r"; done | sort -n | cut -d' ' -f2)
+ROUTES=()
+while read -r r; do [ -n "$r" ] && ROUTES+=("$r"); done < <(ls -d *--*--* 2>/dev/null | sed 's/--[0-9]*$//' | sort -u |
+  while read -r r; do printf '%d %s\n' "$((16#${r%%--*}))" "$r"; done | sort -n | cut -d' ' -f2)
 COUNT=${#ROUTES[@]}
 [ "$COUNT" -eq 0 ] && { echo "no drives on the device"; exit 1; }
 
@@ -48,8 +58,8 @@ show_list() {
   echo "  #   route                      min   size      device time"
   local i r n b
   for ((i=0; i<COUNT; i++)); do
-    r=${ROUTES[$i]}; n=$(ls -d "$r"--* | wc -l); b=$(du -cb "$r"--* | tail -1 | cut -f1)
-    printf "  %-3d %-26s %4d   %-9s %s\n" "$((i+1))" "$r" "$n" "$(human "$b")" "$(date -d @"$(stat -c %Y "$r--0" 2>/dev/null || echo 0)" '+%m-%d %H:%M')"
+    r=${ROUTES[$i]}; n=$(ls -d "$r"--* | wc -l | tr -d ' '); b=$(dirbytes "$r"--*)
+    printf "  %-3d %-26s %4d   %-9s %s\n" "$((i+1))" "$r" "$n" "$(human "$b")" "$(fmt_time "$(mtime "$r--0")")"
   done
 }
 
@@ -70,7 +80,7 @@ fi
 case "$ROUTE_NUM" in ''|*[!0-9]*) echo "bad drive number"; exit 1 ;; esac
 [ "$ROUTE_NUM" -ge 1 ] && [ "$ROUTE_NUM" -le "$COUNT" ] || { echo "no drive #$ROUTE_NUM"; exit 1; }
 R=${ROUTES[$((ROUTE_NUM-1))]}
-NSEG=$(ls -d "$R"--* | wc -l)
+NSEG=$(ls -d "$R"--* | wc -l | tr -d ' ')
 
 if [ -n "$TIME" ]; then
   m=${TIME%%:*}; s=${TIME#*:}; t=$((10#$m * 60 + 10#$s)); c=$((t / 60))
@@ -117,8 +127,8 @@ else
   PATHS_REPORT=()
 fi
 
-tar cf "$TAR" -C "$ROOT" "${PATHS[@]}" "${PATHS_REPORT[@]}" && rm -rf "$EXPORT/report-$R"
+tar chf "$TAR" -C "$ROOT" "${PATHS[@]}" ${PATHS_REPORT[@]+"${PATHS_REPORT[@]}"} && rm -rf "$EXPORT/report-$R"
 echo
-echo "packed: $TAR ($(human "$(stat -c %s "$TAR")"), ${#PATHS[@]} files, drive #$ROUTE_NUM $R)"
-echo "download it in Termius SFTP from /data/export/, then run the clean snippet."
-df -h /data | tail -1
+echo "packed: $TAR ($(human "$(fsize "$TAR")"), ${#PATHS[@]} files, drive #$ROUTE_NUM $R)"
+echo "download it in Termius SFTP from $EXPORT/, then run the clean snippet."
+space
