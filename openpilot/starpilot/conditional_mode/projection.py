@@ -793,6 +793,7 @@ class SceneProjector:
       slow_lead_detected=slower_observation.detected,
       stop_light_detected=stop_observation.light_detected,
       standstill_stop_hold=stop_observation.standstill_hold,
+      model_should_stop=model_should_stop,
       traffic_mode=curve_mode,
       stop_sign_confirmed=sign,
       committed_stop=self.stop_detector.committed if stop_observation.light_detected is not None else None,

@@ -109,6 +109,7 @@ class SceneEvidence:
   standstill_stop_hold: bool | None = None
   launch_forced_exit: bool | None = None
   launch_lead: bool | None = None
+  model_should_stop: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -292,6 +293,8 @@ class ConditionalModePolicy:
     self.cem_previous_stop_hold = False
     self.cem_stop_release_pending = False
     self.cem_launch_suppress_until = 0.0
+    self.cem_hold_light = False
+    self.cem_light_creep = False
 
   @staticmethod
   def _decision(requested: bool, authority: Authority, qualified: bool, warm: bool, reason: Reason, status: int) -> Decision:
@@ -419,8 +422,26 @@ class ConditionalModePolicy:
       self.cem_false_since = None
       self.cem_active = False
       self.cem_stop_release_pending = False
+    # A light hold that ends while the model still asks to stop (typically a gas tap to creep closer to the line)
+    # keeps Experimental: the model stops the car again where the driver lets go. Only a green light / the model
+    # no longer asking to stop ends it. Stop signs keep the accelerator-means-go release.
+    if self.cem_light_creep and (not settings.cem_stop or scene.model_should_stop is False):
+      self.cem_light_creep = False
     if scene.standstill:
       held = committed or scene.standstill_stop_hold is True
+      if held:
+        self.cem_hold_light = scene.stop_sign_confirmed is not True
+        self.cem_light_creep = False
+      elif (settings.cem_stop and self.cem_previous_stop_hold and self.cem_hold_light and
+            scene.model_should_stop is True):
+        self.cem_light_creep = True
+      if self.cem_light_creep:
+        self.cem_previous_standstill = True
+        self.cem_previous_stop_hold = False
+        self.cem_stop_release_pending = True
+        self.cem_active = True
+        self.cem_active_reason = Reason.CEM_STOP
+        return self._decision(True, authority, True, warm, Reason.CEM_STOP, 8)
       self.cem_hold_until = self.cem_slow_lead_until = self.cem_open_road_until = 0.0
       self.cem_false_since = None
       self.cem_previous_open_road = False
@@ -436,6 +457,10 @@ class ConditionalModePolicy:
       self.cem_active_reason = Reason.CEM_STOP if held else Reason.NO_TRIGGER
       return self._decision(held, authority, True, warm, self.cem_active_reason, 8 if held else 0)
     self.cem_previous_standstill = self.cem_previous_stop_hold = False
+    if self.cem_light_creep:
+      self.cem_active = True
+      self.cem_active_reason = Reason.CEM_STOP
+      return self._decision(True, authority, True, warm, Reason.CEM_STOP, 8)
     trigger = self._cem_trigger(scene, settings, launch_suppressed=now_s < self.cem_launch_suppress_until)
     if trigger is not None:
       self.cem_hold_until = now_s + CEM_HOLD_S
