@@ -87,7 +87,8 @@ class RadarInterface(RadarInterfaceBase):
       pt.dRel = position["LONG_DIST"]
       pt.yRel = position["LAT_DIST"] + LAT_WRAP_M * self.lat_wrapped
       pt.vRel = target["REL_SPEED"]
-      pt.deprecated.aRel = pt.deprecated.yvRel = nan
+      pt.deprecated.aRel = target["REL_ACCEL"]  # relative longitudinal acceleration, positive = opening
+      pt.deprecated.yvRel = nan
       pt.deprecated.measured = True
       ret.points = [pt]
     return ret

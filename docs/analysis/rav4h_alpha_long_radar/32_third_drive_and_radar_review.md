@@ -76,3 +76,12 @@
 2. 若 CSC 不够：Chill 下模型预测前方弯道时只减不增地限制加速。
 3. T5 `aRel`：代码小、收益明确，做成默认关的选项，先回放再上车。
 4. 把两个 LTA 修复整理成 PR 提交 StarPilot 上游。
+
+## 7. T5 `aRel` 已接入（默认开）
+
+- 生效条件：Toyota + `ARS510_RADAR` + `DISABLE_RADAR`（Alpha Long + "Radar with Alpha Long" 选项）。其他车型、原车纵向下逐位不变。
+- `ars510_acc_target.py`：`pt.deprecated.aRel = REL_ACCEL`。
+- `radard.py`：`Track.update(..., a_lead)`；`a_lead = aRel + aEgo`（`aEgo` 与 `vEgo` 同样按 `radarDelay` 对齐），一阶低通 `RADAR_ACCEL_RC = 0.1 s`（`RADAR_ACCEL_DT = 0.06 s`，每条雷达记录只更新一次），替代卡尔曼的加速度；`vLeadK` 仍用卡尔曼；`aRel` 为 NaN 时回退卡尔曼。
+- 离线选参（route 8）：τ = 0 / 0.1 / 0.15 / 0.2 s 时，卡尔曼分别滞后 0.45 / 0.35 / 0.30 / 0.25 s，逐帧噪声 0.123 / 0.080 / 0.076 / 0.074（卡尔曼 0.076），672 s 急刹峰值 -2.50 / -2.36 / -2.24 / -2.14（卡尔曼 -1.82）。
+- 测试：`test_radard_radar_accel.py`（关闭时不变、开启时数值与低通、重复记录不重复更新、NaN 回退）；`test_ars510.py` 断言 `aRel` 解码。
+- 上车看：跟车时是否出现更多小幅加减速；前车刹车时是否更早减速。不满意可回退该提交。

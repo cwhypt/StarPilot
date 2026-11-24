@@ -160,14 +160,15 @@ def with_check_byte(frame):
   return bytes([crc]) + frame[1:]
 
 
-def acc_frames(packer, counter, cycle, present=True, distance=35, relative_speed=-2, target_id=3):
+def acc_frames(packer, counter, cycle, present=True, distance=35, relative_speed=-2, target_id=3, relative_accel=-1.5):
   """ACC_TARGET_1-3 as the radar sends them; ACC_TARGET_2 carries its check byte, as every recorded frame does."""
   return [
     (a, with_check_byte(d) if a == 0x237 else d, b)
     for a, d, b in (
       packer.make_can_msg(name, 1, values | {"COUNTER": counter % 16})
       for name, values in (
-        ("ACC_TARGET_1", {"STATE": 5 if present else 1, "TARGET_ID": target_id, "REL_SPEED": relative_speed}),
+        ("ACC_TARGET_1", {"STATE": 5 if present else 1, "TARGET_ID": target_id, "REL_SPEED": relative_speed,
+                           "REL_ACCEL": relative_accel}),
         ("ACC_TARGET_2", {"PRESENT": int(present), "LONG_DIST": distance, "LAT_DIST": 0.25}),
         ("ACC_TARGET_3", {"TIMESTAMP": cycle}),
       )
@@ -189,7 +190,7 @@ def test_acc_target_decodes_one_lead_once_per_cycle_and_clears_no_target():
     assert pt.trackId == 3
     assert (pt.dRel, pt.yRel, pt.vRel) == pytest.approx((35, 0.25, -2))
     assert pt.deprecated.measured and isfinite(pt.vRel)
-    assert isnan(pt.deprecated.aRel) and isnan(pt.deprecated.yvRel)
+    assert pt.deprecated.aRel == pytest.approx(-1.5) and isnan(pt.deprecated.yvRel)
   ret = radar.update([(1_600_000_000, acc_frames(packer, 30, 660000, present=False))])
   assert not ret.points and not ret.errors.canError
 

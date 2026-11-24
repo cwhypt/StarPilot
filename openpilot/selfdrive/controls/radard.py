@@ -36,6 +36,11 @@ NO_TARGET_MIN_PROB = 0.9
 NO_TARGET_MAX_DIST = 60.  # m; the radar's ACC target should certainly cover a lead this close
 NO_TARGET_MIN_SPEED = 5.  # m/s
 
+# ARS510: lead acceleration from the radar's own REL_ACCEL (+ ego accel) instead of differentiating vLead.
+# On two RAV4 drives it matched the Kalman estimate (r=0.93, bias -0.1 m/s^2) and led it by ~0.45 s; a 0.1 s
+# low-pass brings its noise down to the Kalman level and still leads by ~0.35 s (docs 32 section 5).
+RADAR_ACCEL_RC = 0.1
+RADAR_ACCEL_DT = 0.06  # ARS510 record period (~16 Hz; radard feeds each record once)
 RADAR_TO_CAMERA = 1.52  # RADAR is ~ 1.5m ahead from center of mesh frame
 
 
@@ -84,8 +89,9 @@ class Track:
     self.K_C = kalman_params.C
     self.K_K = kalman_params.K
     self.kf = KF1D([[v_lead], [0.0]], self.K_A, self.K_C, self.K_K)
+    self.aLeadRadar: FirstOrderFilter | None = None
 
-  def update(self, d_rel: float, y_rel: float, v_rel: float, v_lead: float):
+  def update(self, d_rel: float, y_rel: float, v_rel: float, v_lead: float, a_lead: float | None = None):
     # relative values, copy
     self.dRel = d_rel   # LONG_DIST
     self.yRel = y_rel   # -LAT_DIST
@@ -98,6 +104,13 @@ class Track:
 
     self.vLeadK = float(self.kf.x[SPEED][0])
     self.aLeadK = float(self.kf.x[ACCEL][0])
+    if a_lead is not None and math.isfinite(a_lead):
+      # measured lead acceleration (ARS510): low-passed, replaces the Kalman derivative
+      if self.aLeadRadar is None:
+        self.aLeadRadar = FirstOrderFilter(a_lead, RADAR_ACCEL_RC, RADAR_ACCEL_DT)
+      else:
+        self.aLeadRadar.update(a_lead)
+      self.aLeadK = float(self.aLeadRadar.x)
 
     # Learn if constant acceleration
     if abs(self.aLeadK) < 0.5:
@@ -206,8 +219,9 @@ def get_lead(v_ego: float, ready: bool, tracks: dict[int, Track], lead_msg: capn
 class RadarD:
   def __init__(self, delay: float = 0.0, *, adjacent_enabled: bool = False, radar_available: bool = False,
                clock_pair_fn=None, honda_bosch_a_radar: bool = False, use_voacc: bool = False,
-               dedupe_radar: bool = False):
+               dedupe_radar: bool = False, radar_accel: bool = False):
     self.use_voacc = use_voacc
+    self.radar_accel = radar_accel
     # ARS510 publishes ~16 Hz but radard runs at 20 Hz: feed each radar record to the Kalman filters once
     self.dedupe_radar = dedupe_radar
     self.last_radar_mono = -1
@@ -233,6 +247,7 @@ class RadarD:
 
     self.v_ego = 0.0
     self.v_ego_hist = deque([0.0], maxlen=int(round(delay / DT_MDL))+1)
+    self.a_ego_hist = deque([0.0], maxlen=int(round(delay / DT_MDL))+1)
     self.last_v_ego_frame = -1
 
     self.radar_state: capnp._DynamicStructBuilder | None = None
@@ -323,12 +338,13 @@ class RadarD:
     if sm.recv_frame['carState'] != self.last_v_ego_frame:
       self.v_ego = sm['carState'].vEgo
       self.v_ego_hist.append(self.v_ego)
+      self.a_ego_hist.append(sm['carState'].aEgo)
       self.last_v_ego_frame = sm.recv_frame['carState']
 
     if self.honda_bosch_a is not None:
       self.honda_bosch_a.update_tracks(sm, rr, self)
     else:
-      ar_pts = {pt.trackId: [pt.dRel, pt.yRel, pt.vRel] for pt in rr.points}
+      ar_pts = {pt.trackId: [pt.dRel, pt.yRel, pt.vRel, pt.deprecated.aRel if self.radar_accel else None] for pt in rr.points}
       radar_fresh = True
       if self.dedupe_radar:
         radar_mono = int(sm.logMonoTime['radarTracks'])
@@ -353,7 +369,9 @@ class RadarD:
         if is_new:
           self.tracks[ids] = Track(ids, v_lead, self.kalman_params)
         if radar_fresh or is_new:
-          self.tracks[ids].update(rpt[0], rpt[1], rpt[2], v_lead)
+          # align a_ego like v_ego; aRel is relative to ego
+          a_lead = rpt[3] + self.a_ego_hist[0] if rpt[3] is not None else None
+          self.tracks[ids].update(rpt[0], rpt[1], rpt[2], v_lead, a_lead)
 
     # *** publish radarState ***
     self.radar_state_valid = sm.all_checks()
@@ -475,8 +493,11 @@ def main() -> None:
   honda_bosch_a = CP.brand == "honda" and CP.carFingerprint in VERIFIED_BOSCH_A_CARS and not CP.radarUnavailable
   from opendbc.car.toyota.values import ToyotaFlags
   ars510 = CP.brand == "toyota" and bool(getattr(CP, "flags", 0) & ToyotaFlags.ARS510_RADAR) and not CP.radarUnavailable
+  # radar-measured lead acceleration: only with Alpha Long + the ARS510 radar option (openpilot owns longitudinal)
+  radar_accel = ars510 and bool(CP.flags & ToyotaFlags.DISABLE_RADAR)
   RD = RadarD(CP.radarDelay, adjacent_enabled=adjacent_enabled, radar_available=not CP.radarUnavailable,
-              honda_bosch_a_radar=honda_bosch_a, use_voacc=voacc_selected(params, CP), dedupe_radar=ars510)
+              honda_bosch_a_radar=honda_bosch_a, use_voacc=voacc_selected(params, CP), dedupe_radar=ars510,
+              radar_accel=radar_accel)
   set_core_affinity([3, 5])
 
   while 1:
