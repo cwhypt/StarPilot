@@ -38,7 +38,7 @@ PERM_STEER_FAULTS = (3, 17)
 #   to 0 for a frame or two (seen 40 ms on a RAV4 2025 hybrid with ~110 driver torque).
 #   Ride that out instead of reporting a fault: the driver is steering, and with AOL a
 #   temporary fault ends in an immediate "TAKE CONTROL" disengagement.
-LTA_STANDBY_BLIP_FRAMES = 25  # carState frames (100 Hz): 0.25 s; longer stays a fault
+LTA_STANDBY_BLIP_FRAMES = 200  # carState frames (100 Hz): 2 s (owner choice; was 0.25 s); longer stays a fault
 LTA_STANDBY_DRIVER_TORQUE = 50  # half of STEER_THRESHOLD: the driver's hands are still on it, not just past override
 
 
