@@ -34,6 +34,20 @@ TEMP_STEER_FAULTS = (0, 9, 11, 21, 25)
 # - lka/lta msg drop out: 3 (recoverable)
 # - prolonged high driver torque: 17 (permanent)
 PERM_STEER_FAULTS = (3, 17)
+# - while the driver overpowers LTA in a tight low-speed turn the EPS can drop LTA_STATE
+#   to 0 for a frame or two (seen 40 ms on a RAV4 2025 hybrid with ~110 driver torque).
+#   Ride that out instead of reporting a fault: the driver is steering, and with AOL a
+#   temporary fault ends in an immediate "TAKE CONTROL" disengagement.
+LTA_STANDBY_BLIP_FRAMES = 25  # carState frames (100 Hz): 0.25 s; longer stays a fault
+LTA_STANDBY_DRIVER_TORQUE = 50  # half of STEER_THRESHOLD: the driver's hands are still on it, not just past override
+
+
+def lta_temporary_fault(lta_state, driver_torque, standby_frames):
+  """(fault, standby_frames) for one carState frame of EPS_STATUS->LTA_STATE."""
+  standby_frames = standby_frames + 1 if lta_state == 0 else 0
+  blip = (lta_state == 0 and abs(driver_torque) > LTA_STANDBY_DRIVER_TORQUE and
+          standby_frames <= LTA_STANDBY_BLIP_FRAMES)
+  return lta_state in TEMP_STEER_FAULTS and not blip, standby_frames
 
 
 ARS510_DBC = "toyota_tss2_ars510"
@@ -52,6 +66,7 @@ class CarState(CarStateBase):
   def __init__(self, CP):
     super().__init__(CP)
     self.radar_pcs_alarm = False
+    self.lta_standby_frames = 0
     self.radar_pcs_age = PCS_STATE_TIMEOUT_FRAMES
     self.radar_silent_frames = 0
     self.radar_frames_seen = 0
@@ -176,7 +191,9 @@ class CarState(CarStateBase):
       ret.steerFaultTemporary |= not (cp.eps_valid and stamp > 0 and stamp <= cp._last_update_nanos <= expiry)
 
     if self.CP.steerControlType == SteerControlType.angle:
-      ret.steerFaultTemporary = ret.steerFaultTemporary or cp.vl["EPS_STATUS"]["LTA_STATE"] in TEMP_STEER_FAULTS
+      lta_fault, self.lta_standby_frames = lta_temporary_fault(cp.vl["EPS_STATUS"]["LTA_STATE"], ret.steeringTorque,
+                                                               self.lta_standby_frames)
+      ret.steerFaultTemporary = ret.steerFaultTemporary or lta_fault
       ret.steerFaultPermanent = ret.steerFaultPermanent or cp.vl["EPS_STATUS"]["LTA_STATE"] in PERM_STEER_FAULTS
 
       # Lane Tracing Assist control is unavailable (EPS_STATUS->LTA_STATE=0) until
