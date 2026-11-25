@@ -28,7 +28,8 @@ class DesireHelper:
   def get_lane_change_direction(CS):
     return LaneChangeDirection.left if CS.leftBlinker else LaneChangeDirection.right
 
-  def update(self, carstate, lateral_active, lane_change_prob, *, auto_evidence=False, engaged=False, navigation_turn=False):
+  def update(self, carstate, lateral_active, lane_change_prob, *, auto_evidence=False, engaged=False, navigation_turn=False,
+             road_edge_blocked=False):
     v_ego = carstate.vEgo
     one_blinker = carstate.leftBlinker != carstate.rightBlinker
     if not carstate.leftBlinker and not carstate.rightBlinker:
@@ -72,6 +73,9 @@ class DesireHelper:
 
         blindspot_detected = ((carstate.leftBlindspot and self.lane_change_direction == LaneChangeDirection.left) or
                               (carstate.rightBlindspot and self.lane_change_direction == LaneChangeDirection.right))
+        # road_edge_blocked is for the signaled side: a median/curb right past the line is not a lane
+        if road_edge_blocked:
+          auto_evidence = False
         if not (self.policy.auto_lane_change and engaged and auto_evidence and not blindspot_detected and
                 not self.auto_signal_blocked):
           self.pre_lane_change_timer = 0.0
@@ -81,6 +85,8 @@ class DesireHelper:
                       self.pre_lane_change_timer >= self.policy.auto_delay_s)
         if blindspot_detected:
           self.auto_status = "blindspotBlocked"
+        elif road_edge_blocked:
+          self.auto_status = "laneUnavailable"
         elif self.policy.auto_lane_change and engaged:
           self.auto_status = "waitingForDelay" if auto_evidence and not self.auto_signal_blocked else "laneUnavailable"
 
@@ -89,7 +95,7 @@ class DesireHelper:
           self.lane_change_direction = LaneChangeDirection.none
           self.lane_change_timer = 0.0
           self.pre_lane_change_timer = 0.0
-        elif (torque_applied or auto_ready) and not blindspot_detected and not (self.policy.one_per_signal and self.lane_change_performed):
+        elif (torque_applied or auto_ready) and not blindspot_detected and not road_edge_blocked and not (self.policy.one_per_signal and self.lane_change_performed):
           self.lane_change_state = LaneChangeState.laneChangeStarting
           self.lane_change_timer = 0.0
           self.pre_lane_change_timer = 0.0

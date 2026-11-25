@@ -188,7 +188,8 @@ class TestAutoLaneChange(unittest.TestCase):
       with self.subTest(direction=direction):
         frame.roadEdges[edge] = line(y)
         self.assertFalse(adjacent_lane_available(frame, direction, 3.0))
-        self.assertTrue(adjacent_lane_available(frame, direction, 0.0))
+        # an edge 1.2 m past the line is a median/curb, not a lane, even with no minimum width set
+        self.assertFalse(adjacent_lane_available(frame, direction, 0.0))
     self.assertFalse(adjacent_lane_available(frame, 0, 0.0))
     self.assertFalse(adjacent_lane_available(frame, -1, -0.1))
     self.assertFalse(adjacent_lane_available(frame, -1, 4.573))

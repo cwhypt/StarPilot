@@ -6,6 +6,11 @@ from statistics import median
 
 from openpilot.selfdrive.modeld.constants import ModelConstants
 
+# A real adjacent lane leaves at least most of a lane between its inner line and the
+# road edge (median 3.5-7 m on recorded drives). Medians, gore strips and curbs beside
+# the lane measured 0.5-1.7 m. 2.5 m sits between the two with margin either side.
+ROAD_EDGE_MIN_CLEARANCE_M = 2.5
+
 
 def _points(line):
   xs, ys = list(line.x), list(line.y)
@@ -50,8 +55,34 @@ def adjacent_lane_available(model, direction: int, minimum_width_m: float) -> bo
     if not all(math.isfinite(value) for value in lane_distances + edge_distances):
       return False
     width = median(lane_distances)
-    if median(edge_distances) < width:
-      width = 0.0
+    edge_clearance = median(edge_distances)
+    # A road edge inside the adjacent lane means there is no lane there, whatever the
+    # saved minimum width (the default minimum of 0.0 m used to let this through).
+    if edge_clearance < width or edge_clearance < ROAD_EDGE_MIN_CLEARANCE_M:
+      return False
     return width >= minimum_width_m
+  except (AttributeError, IndexError, TypeError, ValueError, OverflowError):
+    return False
+
+
+def road_edge_too_close(model, direction: int, minimum_clearance_m: float = ROAD_EDGE_MIN_CLEARANCE_M) -> bool:
+  """True when the model sees the road edge too close beyond the lane line on the signaled side.
+
+  Used for every lane change, driver-nudged included: a median, curb or gore area
+  there is not a lane. Missing or malformed model data does not block (fails open),
+  so this only ever adds a refusal when the model positively sees the edge."""
+  try:
+    if direction not in (-1, 1) or len(model.laneLines) != 4 or len(model.roadEdges) != 2:
+      return False
+    inner, edge = (1, 0) if direction == -1 else (2, 1)
+    inner_points = _points(model.laneLines[inner])
+    edge_points = _points(model.roadEdges[edge])
+    if inner_points is None or edge_points is None:
+      return False
+    xs, ys = inner_points
+    distances = [abs(y - _at(edge_points, x)) for x, y in zip(xs, ys, strict=True)]
+    if not all(math.isfinite(value) for value in distances):
+      return False
+    return median(distances) < minimum_clearance_m
   except (AttributeError, IndexError, TypeError, ValueError, OverflowError):
     return False
