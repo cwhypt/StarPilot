@@ -6,7 +6,7 @@
 |---|---|---|---|
 | P1 | **0003 低速放宽 LTA 角速度上限**：Python 侧 `ANGLE_LIMITS` 与 panda `toyota.h` `TOYOTA_ANGLE_STEERING_LIMITS` 必须同时生效。先确认：设备能否编译 panda 固件、bootstub 是否接受本机签名（debug/release key）、pandad 刷写流程、刷后核对固件签名、回退到原固件的方法。确认后作为单独一次更新，不和别的改动混合 | 待做（阻塞：固件路线未验证） | 0003 补丁；31 §4；_notes 0a/0b/0d（turn exceeds limit、低速转弯跟不上） |
 | P2 | **热点（GPS 地理围栏）**：从已分析行程的事件点生成热点清单（`/data/rav4_hotspots.json`），车上进入热点时只做更保守的动作（提前 Experimental + 限速、禁止向标记侧变道、提前提示手动转弯、单独停车偏移）；GPS 不可靠时不动作 | 进行中（第一步：提取坐标） | 本次讨论 |
-| P3 | **AOL 下转向临时故障不连带退出纵向**：现在 `steerFaultTemporary` 经 AOL 轴状态升级为 critical → `controlsMismatch`（TAKE CONTROL）。改为只退出转向 + 响亮提示，纵向保持 | 待定（用户未决定） | _notes 8 rt1291.6（EPS 25→9，2 s）、0d rt185.7 |
+| P3 | **AOL 下转向临时故障不连带退出纵向**。已查明（0d rt185.7 rlog）：185.685 `steerFaultTemporary` → 185.695 card 已按只退转向处理（lat=0, long=1）→ 185.700 另一处 AOL 检查加 `controlsMismatch`（立即退出）；panda 正常（controlsAllowed=1、无 fault）；`aolAxisState.faultReason` 为 none。原因：`starpilot/aol/temporary_steering.py` / `transport_pause.py` 的"临时 EPS 故障保留"按品牌白名单（Hyundai/Honda/Ford/Subaru/GM/Mazda/VW/...），**没有 Toyota**。要做：给 Toyota 加资格（含 panda 原生 aolSafetyWire 握手是否支持），先用设备跑 selfdrived 回放定位具体分支。本地缺 aarch64 以外的 acados 求解器，AOL 测试只能在设备上跑。注意：0006（state 0 ≤1 s）已覆盖 0d 这一次；8 rt1291（EPS 25→9）应由 update-5 提前释放 LTA 避免——先看新行程是否还出现 | 进行中（定位完成，待设备测试环路） | _notes 8、0d |
 | P4 | T4 B 刹车上限：等出现 `vision_missed=true` 的片段再评估接入 | 只记录 | 32 §3 |
 | P5 | 装雷达 CAN 过滤器时：`radar_accel`（update-8）改为也在 `RADAR_CAN_FILTER` + Alpha Long 下启用；确认 T2/健康提示的门控 | 待硬件 | 对话 2026-11-24 |
 | P6 | 跟踪上游 stable：每次发布后重打本分支提交 | 持续 | T7 |
