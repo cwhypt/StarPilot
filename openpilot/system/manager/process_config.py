@@ -120,6 +120,10 @@ def navigation(started: bool, params: Params, CP: car.CarParams) -> bool:
   return started and params.get_bool("NavigationEnabled")
 
 
+def rav4_hotspot_shadow(started: bool, params: Params, CP: car.CarParams) -> bool:
+  # shadow-mode hotspot logging for the RAV4 2023+ (logs only, controls nothing)
+  return started and CP.carFingerprint == "TOYOTA_RAV4_TSS2_2023"
+
 def only_offroad(started: bool, params: Params, CP: car.CarParams) -> bool:
   return not started
 
@@ -231,6 +235,7 @@ procs = [
   PythonProcess("maneuversd", "openpilot.tools.longitudinal_maneuvers.maneuversd", long_maneuver),
   PythonProcess("lateral_maneuversd", "openpilot.tools.lateral_maneuvers.lateral_maneuversd", lat_maneuver),
   PythonProcess("radard", "openpilot.selfdrive.controls.radard", only_onroad),
+  PythonProcess("rav4_hotspotd", "openpilot.starpilot.rav4.hotspotd", rav4_hotspot_shadow, enabled=not PC),
   PythonProcess("hardwared", "openpilot.system.hardware.hardwared", always_run),
   PythonProcess("modem", "openpilot.common.hardware.comma.modem", always_run, enabled=COMMA_HARDWARE),
   PythonProcess("usage_stats", "openpilot.starpilot.analytics.runtime", always_run, enabled=COMMA_HARDWARE),
