@@ -15,6 +15,17 @@ MAX_BYTES = 512
 MAX_SPEED_MPS = 100 * CV.MPH_TO_MS
 MINIMUM_SPEED_MPS = 5 * CV.MPH_TO_MS
 DEFAULT_SPEED_MPS = MINIMUM_SPEED_MPS
+# Turn Signal Guidance: below this speed a signal is a turn request, above it a lane change (unless the
+# model or navigation confirms a turn). Upstream uses 20 mph. While a route is guiding, navigation tells
+# turns apart (matching_turn_signal), so the floor drops to 12 mph: lane changes into turn pockets on the
+# RAV4 drives started at 17-27 mph (0000000f/00000010/00000011). Without a route a 15 mph signal is often a
+# driveway or side-street turn (00000010 rt454), so the upstream 20 mph stays.
+TURN_SIGNAL_GUIDANCE_MAX_MPS = 20 * CV.MPH_TO_MS
+TURN_SIGNAL_GUIDANCE_MAX_GUIDING_MPS = 12 * CV.MPH_TO_MS
+
+
+def turn_signal_guidance_max(navigation_guiding: bool) -> float:
+  return TURN_SIGNAL_GUIDANCE_MAX_GUIDING_MPS if navigation_guiding else TURN_SIGNAL_GUIDANCE_MAX_MPS
 
 
 @dataclass(frozen=True)

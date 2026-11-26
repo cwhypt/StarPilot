@@ -6,6 +6,7 @@ from openpilot.cereal import log
 from openpilot.common.constants import CV
 
 from openpilot.starpilot.navigation.wire import navigation_state
+from openpilot.starpilot.lateral.lane_change_preferences import turn_signal_guidance_max
 from openpilot.starpilot.lateral.signal_turn import SignalTurnEvidence
 
 SERVICE = 'starpilotNavigation'
@@ -88,6 +89,10 @@ def cruise_ceiling(sm, CP, now_ns: int, cruise_mps: float) -> float | None:
   return None
 
 
+def navigation_guiding(sm, now_ns: int, *, supported: bool) -> bool:
+  return supported and current_instruction(sm, now_ns) is not None
+
+
 def _matching_turn(sm, now_ns: int, supported: bool):
   """(vEgo, distance) of a navigation turn the turn signal points at, else None."""
   nav = current_instruction(sm, now_ns) if supported else None
@@ -104,12 +109,23 @@ def _matching_turn(sm, now_ns: int, supported: bool):
 def matching_turn_signal(sm, now_ns: int, *, supported: bool) -> bool:
   """The signal is for the turn itself: no lane change.
 
-  Only the window turn_desire() acts in counts (slow enough, close enough). Further out, a
-  matching signal is usually the lane change into the turn lane, which the driver needs first
-  (drives 0000000f/00000010/00000011: 101-189 m out at 32-38 mph; the old 250 m window turned
-  every such lane change into nothing)."""
+  Further out, a matching signal is usually the lane change into the turn lane, which the driver
+  needs first (drives 0000000f/00000010/00000011; the old 250 m window turned every such lane
+  change into nothing)."""
   turn = _matching_turn(sm, now_ns, supported)
-  return turn is not None and in_turn_window(*turn)
+  return turn is not None and in_signal_turn_window(*turn)
+
+
+SIGNAL_TURN_MAX_MPS = 25 * CV.MPH_TO_MS
+
+
+def in_signal_turn_window(v_ego, distance_m) -> bool:
+  """A matching signal is the turn itself: under 25 mph and within max(40 m, 4 s) of the turn.
+
+  Replayed on 0000000f/00000010/00000011: lane changes into the turn pocket started 56-124 m out
+  (17-27 mph); every signal-for-the-turn moment within 40 m was under 19 mph."""
+  return bool(math.isfinite(v_ego) and math.isfinite(distance_m) and 0 <= v_ego < SIGNAL_TURN_MAX_MPS and
+              0 <= distance_m <= min(90., max(40., v_ego * 4.)))
 
 
 def in_turn_window(v_ego, distance_m) -> bool:
@@ -177,7 +193,7 @@ class TurnIntent:
       if (not supported or not self.steering_capable or not self.automatic_turn_enabled or
           current_desire != log.Desire.none or not cc.latActive or
           not cs.canValid or cs.canTimeout or str(cs.gearShifter) != 'drive' or
-          not math.isfinite(cs.vEgo) or (cs.vEgo >= 20 * CV.MPH_TO_MS and
+          not math.isfinite(cs.vEgo) or (cs.vEgo >= turn_signal_guidance_max(current_instruction(sm, now_ns) is not None) and
             (cs.steeringPressed or not self.signal_model.current(sm, now_ns))) or
           not device.started):
         return current_desire

@@ -222,12 +222,15 @@ def test_native_navigation_approach_has_braking_capacity_without_changing_cruise
 
 
 @pytest.mark.parametrize('mph,distance,turn', [
-  (32., 101., False),  # 0000000f/00000011: lane change toward the turn lane, still far out
-  (38., 189., False),
-  (24., 54., True),    # 00000010 rt370: at the turn
+  (32., 101., False),  # 00000011 rt130: far out
+  (38., 189., False),  # 00000011 rt245: lane change toward the pocket
+  (26.7, 107., False), # 00000011 rt252: the actual pocket lane change
+  (24.2, 63., False),  # 00000010 rt370: pocket lane change
+  (17.5, 56., False),  # 0000000f rt212: pocket lane change
+  (13., 28., True),    # 0000000f rt217: in the pocket, the turn itself
   (21., 30., True),
   (12., 35., True),
-  (20., 80., False),
+  (26., 30., False),   # too fast to be turning here
 ])
 def test_matching_signal_is_a_turn_only_inside_the_turn_window(sm, mph, distance, turn):
   from openpilot.starpilot.navigation.intent import matching_turn_signal
@@ -256,3 +259,28 @@ def test_far_matching_turn_signal_starts_automatic_lane_change(sm):
   assert helper.lane_change_state == log.LaneChangeState.preLaneChange
   helper.update(cs, True, 0., auto_evidence=True, engaged=True, navigation_turn=turn)
   assert helper.lane_change_state == log.LaneChangeState.laneChangeStarting
+
+
+@pytest.mark.parametrize('mph,guiding,expected', [
+  (15., True, log.LaneChangeState.preLaneChange),   # route guiding: 12 mph floor
+  (11., True, log.LaneChangeState.off),
+  (15., False, log.LaneChangeState.off),            # no route: upstream 20 mph
+  (21., False, log.LaneChangeState.preLaneChange),
+])
+def test_turn_signal_guidance_floor_follows_navigation(sm, mph, guiding, expected):
+  from openpilot.selfdrive.controls.lib.desire_helper import DesireHelper
+  from openpilot.starpilot.lateral.lane_change_preferences import LaneChangePolicy
+  cs = sm['carState']
+  cs.leftBlinker, cs.rightBlinker, cs.vEgo = True, False, mph * CV.MPH_TO_MS
+  cs.steeringPressed, cs.steeringTorque = False, 0.
+  helper = DesireHelper(LaneChangePolicy(turn_signal_guidance=True))
+  helper.update(cs, True, 0., navigation_guiding=guiding)
+  assert helper.lane_change_state == expected
+
+
+def test_navigation_guiding_needs_support_and_a_fresh_route(sm):
+  from openpilot.starpilot.navigation.intent import navigation_guiding
+  assert navigation_guiding(sm, NOW, supported=True)
+  assert not navigation_guiding(sm, NOW, supported=False)
+  sm['starpilotNavigation'].navigation.status = 'arrived'
+  assert not navigation_guiding(sm, NOW, supported=True)

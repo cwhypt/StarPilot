@@ -138,7 +138,8 @@ def test_guiding_route_does_not_hide_user_signal(case, kind, modifier):
   assert select(TurnIntent(params, cp), sm) == log.Desire.turnLeft
 
 
-@pytest.mark.parametrize('speed,expected', [(10., log.LaneChangeState.off), (25., log.LaneChangeState.preLaneChange)])
+@pytest.mark.parametrize('speed,expected', [(10., log.LaneChangeState.off), (15., log.LaneChangeState.off),
+                                            (25., log.LaneChangeState.preLaneChange)])
 def test_actual_helper_turning_and_lane_change_regimes(case, speed, expected):
   from openpilot.common.constants import CV
   from openpilot.selfdrive.controls.lib.desire_helper import DesireHelper
@@ -148,7 +149,7 @@ def test_actual_helper_turning_and_lane_change_regimes(case, speed, expected):
   helper.update(sm['carState'], True, 0.)
   assert helper.lane_change_state == expected
   result = select(TurnIntent(params, cp), sm, helper.desire)
-  assert result == (log.Desire.turnLeft if speed < 20 else log.Desire.none)
+  assert result == (log.Desire.turnLeft if speed < 20 else log.Desire.none)  # no route: upstream 20 mph
 
 
 def test_explicit_off_preserves_existing_low_speed_lane_change(case):

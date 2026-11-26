@@ -1,7 +1,7 @@
 from openpilot.cereal import log
 from openpilot.common.constants import CV
 from openpilot.common.realtime import DT_MDL
-from openpilot.starpilot.lateral.lane_change_preferences import LaneChangePolicy, MINIMUM_SPEED_MPS
+from openpilot.starpilot.lateral.lane_change_preferences import LaneChangePolicy, MINIMUM_SPEED_MPS, turn_signal_guidance_max
 
 LaneChangeState = log.LaneChangeState
 LaneChangeDirection = log.LaneChangeDirection
@@ -29,7 +29,7 @@ class DesireHelper:
     return LaneChangeDirection.left if CS.leftBlinker else LaneChangeDirection.right
 
   def update(self, carstate, lateral_active, lane_change_prob, *, auto_evidence=False, engaged=False, navigation_turn=False,
-             road_edge_blocked=False):
+             road_edge_blocked=False, navigation_guiding=False):
     v_ego = carstate.vEgo
     one_blinker = carstate.leftBlinker != carstate.rightBlinker
     if not carstate.leftBlinker and not carstate.rightBlinker:
@@ -43,7 +43,7 @@ class DesireHelper:
     self.last_signal_direction = signal_direction
     self.auto_status = "manualRequired"
     below_lane_change_speed = v_ego < max(MINIMUM_SPEED_MPS, self.policy.minimum_speed_mps,
-                                          20 * CV.MPH_TO_MS if self.policy.turn_signal_guidance else 0.0)
+                                          turn_signal_guidance_max(navigation_guiding) if self.policy.turn_signal_guidance else 0.0)
 
     if not self.policy.enabled or not lateral_active or below_lane_change_speed or self.lane_change_timer > LANE_CHANGE_TIME_MAX:
       self.lane_change_state = LaneChangeState.off

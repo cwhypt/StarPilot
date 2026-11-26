@@ -54,7 +54,7 @@ from openpilot.starpilot.car.hyundai.model_smoothing import seconds as kona_smoo
 from openpilot.starpilot.models.status import ModelVariant
 from openpilot.starpilot.models.startup import report_load_timeout, wait_for_chestnut_power
 from openpilot.starpilot.models.recovery import STARTUP_FALLBACK_EXIT
-from openpilot.starpilot.navigation.intent import TurnIntent, matching_turn_signal
+from openpilot.starpilot.navigation.intent import TurnIntent, matching_turn_signal, navigation_guiding
 from openpilot.starpilot.models.catalog import BUNDLED_CURRENT, BY_ID, DEFAULT_SMALL, DEFAULT_SMALL_SHA256
 from openpilot.starpilot.models.runner import CatalogModelState, load_verified_model
 from openpilot.starpilot.models import jetlink_adapter
@@ -693,7 +693,8 @@ def main(demo=False):
                 auto_evidence=auto_ready, engaged=auto_trigger_engaged(sm, runtime_lane_policy,
                   openpilot_longitudinal=bool(CP.openpilotLongitudinalControl), now_mono_ns=mono_now_ns),
                 navigation_turn=signal_turn or matching_turn_signal(sm, mono_now_ns, supported=navigation_turn.automatic_turn_enabled),
-                road_edge_blocked=road_edge_too_close(modelv2_send.modelV2, direction))
+                road_edge_blocked=road_edge_too_close(modelv2_send.modelV2, direction),
+                navigation_guiding=navigation_guiding(sm, mono_now_ns, supported=navigation_turn.automatic_turn_enabled))
       modelv2_send.modelV2.meta.laneChangeState = DH.lane_change_state
       modelv2_send.modelV2.meta.laneChangeDirection = DH.lane_change_direction
 
