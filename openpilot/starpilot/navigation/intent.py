@@ -45,9 +45,8 @@ def turn_desire(sm, now_ns: int, current_desire, *, supported: bool):
   if nav is None:
     return current_desire
   cs, cc, instruction = sm['carState'], sm['carControl'], nav.instruction
-  if (not cc.latActive or cs.standstill or not math.isfinite(cs.vEgo) or not 0 <= cs.vEgo < 14 or
-      instruction.maneuverType != 'turn' or not math.isfinite(instruction.distanceMeters) or
-      not 0 <= instruction.distanceMeters <= min(90., max(35., cs.vEgo * 6.))):
+  if (not cc.latActive or cs.standstill or instruction.maneuverType != 'turn' or
+      not in_turn_window(cs.vEgo, instruction.distanceMeters)):
     return current_desire
   if instruction.maneuverModifier in ('left', 'sharpLeft') and cs.leftBlinker and not cs.rightBlinker and not cs.leftBlindspot:
     return log.Desire.turnLeft
@@ -89,16 +88,45 @@ def cruise_ceiling(sm, CP, now_ns: int, cruise_mps: float) -> float | None:
   return None
 
 
-def matching_turn_signal(sm, now_ns: int, *, supported: bool) -> bool:
+def _matching_turn(sm, now_ns: int, supported: bool):
+  """(vEgo, distance) of a navigation turn the turn signal points at, else None."""
   nav = current_instruction(sm, now_ns) if supported else None
   if nav is None:
-    return False
+    return None
   cs, instruction = sm['carState'], nav.instruction
   matching = ((instruction.maneuverModifier in ('left', 'sharpLeft') and cs.leftBlinker and not cs.rightBlinker) or
               (instruction.maneuverModifier in ('right', 'sharpRight') and cs.rightBlinker and not cs.leftBlinker))
-  return bool(instruction.maneuverType == 'turn' and matching and math.isfinite(cs.vEgo) and
-              math.isfinite(instruction.distanceMeters) and
-              0 <= instruction.distanceMeters <= min(250., max(30., 15. + max(0., cs.vEgo) * 12.)))
+  if instruction.maneuverType != 'turn' or not matching or not math.isfinite(cs.vEgo) or not math.isfinite(instruction.distanceMeters):
+    return None
+  return cs.vEgo, instruction.distanceMeters
+
+
+def matching_turn_signal(sm, now_ns: int, *, supported: bool) -> bool:
+  """The signal is for the turn itself: no lane change.
+
+  Only the window turn_desire() acts in counts (slow enough, close enough). Further out, a
+  matching signal is usually the lane change into the turn lane, which the driver needs first
+  (drives 0000000f/00000010/00000011: 101-189 m out at 32-38 mph; the old 250 m window turned
+  every such lane change into nothing)."""
+  turn = _matching_turn(sm, now_ns, supported)
+  return turn is not None and in_turn_window(*turn)
+
+
+def approaching_matching_turn(sm, now_ns: int, *, supported: bool) -> bool:
+  """A matching turn is near (the old 250 m window): a lane change here needs the driver's nudge.
+
+  Close to a turn the lane beside us may be oncoming traffic or no lane at all, which the
+  model cannot always tell, so the automatic (nudgeless) start is held back."""
+  turn = _matching_turn(sm, now_ns, supported)
+  if turn is None:
+    return False
+  v_ego, distance = turn
+  return 0 <= distance <= min(250., max(30., 15. + max(0., v_ego) * 12.))
+
+
+def in_turn_window(v_ego, distance_m) -> bool:
+  return bool(math.isfinite(v_ego) and math.isfinite(distance_m) and 0 <= v_ego < 14 and
+              0 <= distance_m <= min(90., max(35., v_ego * 6.)))
 
 
 class TurnIntent:

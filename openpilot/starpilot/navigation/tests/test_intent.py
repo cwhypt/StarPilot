@@ -219,3 +219,55 @@ def test_native_navigation_approach_has_braking_capacity_without_changing_cruise
           assert planner.a_cruise >= -max(1., {'sport': 2.4, 'standard': 1.2}.get(response, 0.))
         else:
           assert cruise.call_args.kwargs['base_brake_floor'] == -{None: .5, 'eco': .6, 'standard': 1.2, 'sport': 2.4}[response]
+
+
+@pytest.mark.parametrize('mph,distance,turn', [
+  (32., 101., False),  # 0000000f/00000011: lane change toward the turn lane, still far out
+  (38., 189., False),
+  (24., 54., True),    # 00000010 rt370: at the turn
+  (21., 30., True),
+  (12., 35., True),
+  (20., 80., False),
+])
+def test_matching_signal_is_a_turn_only_inside_the_turn_window(sm, mph, distance, turn):
+  from openpilot.starpilot.navigation.intent import matching_turn_signal
+  cs = sm['carState']
+  nav = sm['starpilotNavigation'].navigation
+  nav.instruction.maneuverModifier = 'left'
+  nav.instruction.distanceMeters = distance
+  cs.leftBlinker, cs.rightBlinker, cs.vEgo = True, False, mph * CV.MPH_TO_MS
+  assert matching_turn_signal(sm, NOW, supported=True) is turn
+
+
+@pytest.mark.parametrize('mph,distance,near', [(32., 101., True), (38., 189., True), (38., 240., False), (24., 54., True),
+                                                (60., 260., False)])
+def test_near_matching_turn_needs_a_nudge(sm, mph, distance, near):
+  from openpilot.starpilot.navigation.intent import approaching_matching_turn
+  cs = sm['carState']
+  nav = sm['starpilotNavigation'].navigation
+  nav.instruction.maneuverModifier = 'left'
+  nav.instruction.distanceMeters = distance
+  cs.leftBlinker, cs.rightBlinker, cs.vEgo = True, False, mph * CV.MPH_TO_MS
+  assert approaching_matching_turn(sm, NOW, supported=True) is near
+  cs.leftBlinker, cs.rightBlinker = False, True
+  assert approaching_matching_turn(sm, NOW, supported=True) is False
+
+
+def test_far_matching_turn_nudge_starts_lane_change(sm):
+  from openpilot.selfdrive.controls.lib.desire_helper import DesireHelper
+  from openpilot.starpilot.navigation.intent import matching_turn_signal
+  from openpilot.starpilot.lateral.lane_change_preferences import LaneChangePolicy
+  cs = sm['carState']
+  nav = sm['starpilotNavigation'].navigation
+  nav.instruction.maneuverModifier = 'left'
+  nav.instruction.distanceMeters = 150.
+  cs.leftBlinker, cs.rightBlinker, cs.vEgo = True, False, 35. * CV.MPH_TO_MS
+  cs.steeringPressed, cs.steeringTorque = False, 0.
+  helper = DesireHelper(LaneChangePolicy())
+  turn = matching_turn_signal(sm, NOW, supported=True)
+  assert not turn
+  helper.update(cs, True, 0., navigation_turn=turn)
+  assert helper.lane_change_state == log.LaneChangeState.preLaneChange
+  cs.steeringPressed, cs.steeringTorque = True, 150.
+  helper.update(cs, True, 0., navigation_turn=turn)
+  assert helper.lane_change_state == log.LaneChangeState.laneChangeStarting
