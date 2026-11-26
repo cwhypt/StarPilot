@@ -54,7 +54,7 @@ from openpilot.starpilot.car.hyundai.model_smoothing import seconds as kona_smoo
 from openpilot.starpilot.models.status import ModelVariant
 from openpilot.starpilot.models.startup import report_load_timeout, wait_for_chestnut_power
 from openpilot.starpilot.models.recovery import STARTUP_FALLBACK_EXIT
-from openpilot.starpilot.navigation.intent import TurnIntent, approaching_matching_turn, matching_turn_signal
+from openpilot.starpilot.navigation.intent import TurnIntent, matching_turn_signal
 from openpilot.starpilot.models.catalog import BUNDLED_CURRENT, BY_ID, DEFAULT_SMALL, DEFAULT_SMALL_SHA256
 from openpilot.starpilot.models.runner import CatalogModelState, load_verified_model
 from openpilot.starpilot.models import jetlink_adapter
@@ -689,8 +689,6 @@ def main(demo=False):
                                                   navigation_turn.automatic_turn_enabled),
         clock_skew_ns=clock_skew_ns, lane_change_state=DH.lane_change_state)
       engaged = bool(sm['carControl'].latActive)
-      # near a navigation turn the signal may be for the turn lane or for the turn: the driver confirms
-      auto_ready = auto_ready and not approaching_matching_turn(sm, mono_now_ns, supported=navigation_turn.automatic_turn_enabled)
       DH.update(car_state, sm['carControl'].latActive, lane_change_prob,
                 auto_evidence=auto_ready, engaged=auto_trigger_engaged(sm, runtime_lane_policy,
                   openpilot_longitudinal=bool(CP.openpilotLongitudinalControl), now_mono_ns=mono_now_ns),

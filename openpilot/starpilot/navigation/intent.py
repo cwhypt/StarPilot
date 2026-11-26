@@ -112,18 +112,6 @@ def matching_turn_signal(sm, now_ns: int, *, supported: bool) -> bool:
   return turn is not None and in_turn_window(*turn)
 
 
-def approaching_matching_turn(sm, now_ns: int, *, supported: bool) -> bool:
-  """A matching turn is near (the old 250 m window): a lane change here needs the driver's nudge.
-
-  Close to a turn the lane beside us may be oncoming traffic or no lane at all, which the
-  model cannot always tell, so the automatic (nudgeless) start is held back."""
-  turn = _matching_turn(sm, now_ns, supported)
-  if turn is None:
-    return False
-  v_ego, distance = turn
-  return 0 <= distance <= min(250., max(30., 15. + max(0., v_ego) * 12.))
-
-
 def in_turn_window(v_ego, distance_m) -> bool:
   return bool(math.isfinite(v_ego) and math.isfinite(distance_m) and 0 <= v_ego < 14 and
               0 <= distance_m <= min(90., max(35., v_ego * 6.)))
