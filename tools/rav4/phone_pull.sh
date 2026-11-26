@@ -203,7 +203,11 @@ if [ "$REPORT" = 1 ]; then
     NSEG=$(ls -d "$R"--* | wc -l | tr -d ' ')
     RLOGS=$(for s in $(seq 0 $((NSEG - 1))); do ls "$ROOT/$R--$s"/rlog* 2>/dev/null | head -1; done)
     { echo "route $R"; git -C "$OP" log --oneline -1 2>/dev/null | cat
-      for k in AlphaLongitudinalEnabled ToyotaRadarMode DisableUpdates; do echo "$k=$(cat "$DATA/params/d/$k" 2>/dev/null)"; done; } > "$OUT/info.txt"
+      for k in AlphaLongitudinalEnabled ToyotaRadarMode DisableUpdates; do echo "$k=$(cat "$DATA/params/d/$k" 2>/dev/null)"; done
+      echo "model preferences: $(cat "$DATA"/models/*/preferences.json 2>/dev/null | head -c 600)"
+      echo "driving model (rt modelId variant):"
+      QLOGS=$(for s in $(seq 0 $((NSEG - 1))); do ls "$ROOT/$R--$s"/qlog* 2>/dev/null | head -1; done)
+      (cd "$OP" && PYTHONPATH=$OP timeout 300 "$PY" "$OP/tools/rav4/route_model.py" $QLOGS 2>&1 | head -20); } > "$OUT/info.txt"
     for t in check_t2_radar_fcw probe_required_decel replay_radar_brake_cap; do
       f=$OP/openpilot/tools/longitudinal/$t.py; [ -f "$f" ] || continue
       echo "analysis $R: $t ..."
