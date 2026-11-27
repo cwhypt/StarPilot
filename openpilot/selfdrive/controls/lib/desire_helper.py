@@ -7,7 +7,6 @@ LaneChangeState = log.LaneChangeState
 LaneChangeDirection = log.LaneChangeDirection
 
 LANE_CHANGE_SPEED_MIN = 20 * CV.MPH_TO_MS
-LANE_CHANGE_MAX_STEER_DEG = 25.
 LANE_CHANGE_TIME_MAX = 10.
 LANE_CHANGE_START_TIME = 0.5
 
@@ -32,11 +31,6 @@ class DesireHelper:
   def update(self, carstate, lateral_active, lane_change_prob, *, auto_evidence=False, engaged=False, navigation_turn=False,
              road_edge_blocked=False, navigation_guiding=False):
     v_ego = carstate.vEgo
-    # Still in a turn: hold the lane change like a blocked side. 00000013 rt157.7: right signal for the next
-    # turn while finishing a right turn (wheel -34 deg, driver torque counted as the nudge) moved the car
-    # into the bike lane. Lane changes on the RAV4 drives started within +-21 deg.
-    if abs(getattr(carstate, 'steeringAngleDeg', 0.0)) > LANE_CHANGE_MAX_STEER_DEG:
-      road_edge_blocked = True
     one_blinker = carstate.leftBlinker != carstate.rightBlinker
     if not carstate.leftBlinker and not carstate.rightBlinker:
       self.lane_change_performed = False

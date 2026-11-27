@@ -81,18 +81,3 @@ def test_auto_lane_change_is_held_while_edge_is_close():
   assert dh.lane_change_state == LCS.preLaneChange
   run(dh, carstate(), 2, auto_evidence=True, engaged=True)
   assert dh.lane_change_state == LCS.laneChangeStarting
-
-
-def test_lane_change_waits_until_the_turn_is_finished():
-  # 00000013 rt157.7: right signal while still turning right; the driver's turning torque was taken as the nudge
-  dh = DesireHelper(LaneChangePolicy())
-  cs = carstate(left=False, torque=-160., pressed=True)
-  cs.rightBlinker = True
-  cs.steeringAngleDeg = -34.
-  run(dh, cs, 1)
-  run(dh, cs, 10)
-  assert dh.lane_change_state == LCS.preLaneChange
-  assert dh.auto_status == "laneUnavailable"
-  cs.steeringAngleDeg = -8.
-  run(dh, cs, 1)
-  assert dh.lane_change_state == LCS.laneChangeStarting
