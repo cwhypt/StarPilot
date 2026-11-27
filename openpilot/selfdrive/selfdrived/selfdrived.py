@@ -1295,6 +1295,15 @@ class SelfdriveD:
       alerts.append(notification)
     if not recovery.monitor.visible(now_ns):
       clear_event_types.add(RADAR_RECOVERY_EVENT)
+    # RAV4 hotspot notifications (rav4_hotspotd): notification only, never changes control
+    from openpilot.starpilot.rav4.hotspot_alert import EVENT_TYPE as RAV4_HOTSPOT_EVENT, HotspotAlert
+    if not hasattr(self, 'rav4_hotspot_alert'):
+      self.rav4_hotspot_alert = HotspotAlert(self.CP)
+    hotspot_alert = self.rav4_hotspot_alert.update(time.monotonic_ns())
+    if hotspot_alert is not None:
+      alerts.append(hotspot_alert)
+    else:
+      clear_event_types.add(RAV4_HOTSPOT_EVENT)
     # A cold/unarmed fault classification is not a pause of expected steering.
     # Qualified availability retention already carries both fields even while
     # ordinary cruise is disabled; this only selects its presentation.
@@ -1362,6 +1371,7 @@ class SelfdriveD:
         selected.audible_alert == log.SelfdriveState.AudibleAlert.prompt),
       requested_until_ns=getattr(self, 'aol_availability_chime_until_ns', 0))
     recovery.selected(self.AM.current_alert)
+    self.rav4_hotspot_alert.selected(self.AM.current_alert)
 
   def ordinary_source_availability(self, CS, now_ns, native=None):
     """Classify lost host source; never renew a command or change engagement."""

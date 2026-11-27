@@ -1,12 +1,14 @@
 """RAV4 hotspot shadow evaluation: navigation rules first, GPS hotspots as backup.
 
-Shadow only: this module computes which conservative action *would* apply (e.g. request Experimental, cap
-speed, refuse a lane change toward a side, warn of a manual turn) and reports enter/exit transitions. It never
-changes vehicle behaviour. Stale or inaccurate navigation/GPS data means "no action".
+This module computes which conservative action applies (e.g. request Experimental, cap speed, refuse a lane
+change toward a side, warn of a manual turn) and reports enter/exit transitions. It never changes vehicle
+behaviour itself: rav4_hotspotd logs every action and turns only the "alert" ones into driver notifications;
+the control actions stay log-only. Stale or inaccurate navigation/GPS data means "no action".
 
 Hotspot file (private, never in the repo): /data/rav4_hotspots.json, the `hotspots_v2.json` format:
   {"version": 2, "spots": [{"id", "name", "action", "lat", "lon", "heading", "radius_m", "heading_tol_deg",
-   "cap_mph"?, "offset_ft"?, "only_without_navigation"?, "enabled"}], ...}
+   "cap_mph"?, "offset_ft"?, "only_without_navigation"?, "night_only"?, "enabled"}],
+   "live_alerts"?: true, "turn_alerts"?: true, ...}
 """
 from __future__ import annotations
 
@@ -34,6 +36,10 @@ AFTER_EXIT_S = 30.0
 AFTER_EXIT_MIN_SPEED = 4.0   # m/s
 AFTER_EXIT_CAP_MPH = 25.0
 MPH = 0.44704
+TAKEOVER_MODIFIERS = ("left", "right", "sharp left", "sharp right", "uturn")  # EPS limits LTA to ~95 deg of wheel
+START_NOFIX_S = 180.0        # start of drive without a GPS fix yet (garage exit): conservative until the fix
+START_NOFIX_CAP_MPH = 15.0
+SUN_DAY_ELEVATION_DEG = -2.0  # above this the sun counts as up (after sunrise / before civil dusk deepens)
 
 
 @dataclass(frozen=True)
@@ -49,6 +55,7 @@ class Spot:
   cap_mph: float | None = None
   offset_ft: float | None = None
   only_without_navigation: bool = False
+  night_only: bool = False
   enabled: bool = False
 
 
@@ -67,6 +74,7 @@ class Gps:
   lon: float
   bearing: float
   accuracy_m: float
+  unix_ms: int = 0
 
 
 @dataclass(frozen=True)
@@ -99,6 +107,38 @@ def angle_diff(a, b):
   return abs((a - b + 180.0) % 360.0 - 180.0)
 
 
+def sun_elevation_deg(lat, lon, unix_ms):
+  """Approximate solar elevation (NOAA low-precision formula, < 1 deg error); None without a valid time."""
+  if not _finite(lat, lon, unix_ms) or unix_ms < 1.5e12:
+    return None
+  d = unix_ms / 86400000.0 - 10957.5  # days since J2000.0
+  g = math.radians((357.529 + 0.98560028 * d) % 360)
+  q = (280.459 + 0.98564736 * d) % 360
+  lam = math.radians(q + 1.915 * math.sin(g) + 0.020 * math.sin(2 * g))
+  eps = math.radians(23.439 - 0.00000036 * d)
+  dec = math.asin(math.sin(eps) * math.sin(lam))
+  ra = math.degrees(math.atan2(math.cos(eps) * math.sin(lam), math.cos(lam))) % 360
+  gmst = (280.46061837 + 360.98564736629 * d) % 360
+  ha = math.radians(((gmst + lon - ra + 180) % 360) - 180)
+  la = math.radians(lat)
+  return math.degrees(math.asin(math.sin(la) * math.sin(dec) + math.cos(la) * math.cos(dec) * math.cos(ha)))
+
+
+def load_settings(path=HOTSPOT_PATH):
+  """Top-level switches of the hotspot file; defaults when missing or malformed."""
+  out = {"live_alerts": True, "turn_alerts": True}
+  try:
+    if os.path.isfile(path) and os.path.getsize(path) <= MAX_FILE_BYTES:
+      with open(path, encoding="utf-8") as f:
+        doc = json.load(f)
+      for key in out:
+        if isinstance(doc.get(key), bool):
+          out[key] = doc[key]
+  except (OSError, ValueError, AttributeError):
+    pass
+  return out
+
+
 def load_spots(path=HOTSPOT_PATH):
   """Spots from the private hotspot file; a missing or malformed file gives no spots (no action)."""
   try:
@@ -115,7 +155,7 @@ def load_spots(path=HOTSPOT_PATH):
                     cap_mph=None if s.get("cap_mph") is None else float(s["cap_mph"]),
                     offset_ft=None if s.get("offset_ft") is None else float(s["offset_ft"]),
                     only_without_navigation=bool(s.get("only_without_navigation", False)),
-                    enabled=bool(s.get("enabled", False)))
+                    night_only=bool(s.get("night_only", False)), enabled=bool(s.get("enabled", False)))
       except (KeyError, TypeError, ValueError):
         continue
       if (spot.action and _finite(spot.lat, spot.lon, spot.heading, spot.radius_m, spot.heading_tol_deg) and
@@ -154,11 +194,20 @@ class HotspotShadow:
     self.spots = list(spots)
     self.prev_nav: Nav | None = None
     self.exit_done_t: float | None = None
+    self.start_t: float | None = None
+    self.had_fix = False
 
   def evaluate(self, t: float, nav: Nav | None, gps: Gps | None, v_ego: float, left_blinker: bool, right_blinker: bool):
     """Actions that would apply now. `nav`/`gps` must be None when stale, missing or not guiding."""
     actions: list[Action] = []
     v = v_ego if _finite(v_ego) and v_ego > 0 else 0.0
+    if self.start_t is None:
+      self.start_t = t
+    good_gps = gps is not None and _finite(gps.lat, gps.lon, gps.bearing, gps.accuracy_m) and gps.accuracy_m <= GPS_MAX_ACCURACY_M
+    self.had_fix = self.had_fix or good_gps
+    if not self.had_fix and t - self.start_t <= START_NOFIX_S and v > 1.0:
+      actions.append(Action("S_nofix", "experimental", {}))
+      actions.append(Action("S_nofix", "speed_cap", {"cap_mph": START_NOFIX_CAP_MPH}))
 
     # an off-ramp instruction that ended close to its point counts as taken
     if self.prev_nav is not None and self.prev_nav.maneuver_type == "off ramp" and \
@@ -171,6 +220,9 @@ class HotspotShadow:
       if nav.maneuver_type in TURN_TYPES and nav.distance_m <= max(TURN_MIN_LOOKAHEAD_M, v * TURN_LOOKAHEAD_S):
         actions.append(Action("N_turn", "experimental", {"type": nav.maneuver_type, "modifier": nav.modifier,
                                                          "dist_m": round(nav.distance_m)}))
+        if nav.maneuver_type == "turn" and nav.modifier in TAKEOVER_MODIFIERS:
+          actions.append(Action("N_turn", "alert", {"kind": "turn_takeover", "modifier": nav.modifier,
+                                                    "dist_m": round(nav.distance_m)}))
       is_exit = nav.maneuver_type in ("off ramp", "fork") or "exit" in nav.text.lower()
       if is_exit and nav.distance_m <= EXIT_LOOKAHEAD_M:
         side = "right" if "right" in nav.modifier else "left" if "left" in nav.modifier else None
@@ -181,9 +233,13 @@ class HotspotShadow:
       actions.append(Action("N_after_exit", "experimental", {"since_s": round(t - self.exit_done_t, 1)}))
       actions.append(Action("N_after_exit", "speed_cap", {"cap_mph": AFTER_EXIT_CAP_MPH}))
 
-    if gps is not None and _finite(gps.lat, gps.lon, gps.bearing, gps.accuracy_m) and gps.accuracy_m <= GPS_MAX_ACCURACY_M:
+    if good_gps:
+      elevation = sun_elevation_deg(gps.lat, gps.lon, gps.unix_ms)
+      sun_up = elevation is not None and elevation > SUN_DAY_ELEVATION_DEG
       for spot in self.spots:
         if spot.only_without_navigation and nav is not None:
+          continue
+        if spot.night_only and sun_up:
           continue
         if angle_diff(gps.bearing, spot.heading) > spot.heading_tol_deg:
           continue

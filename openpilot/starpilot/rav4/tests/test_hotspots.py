@@ -14,14 +14,19 @@ def spot(**kw):
   return Spot(**base)
 
 
-def rules(actions):
+def all_rules(actions):
   return {(a.rule, a.action) for a in actions}
+
+
+def rules(actions):
+  """Without the start-of-drive no-fix rule, which fires in every test that has no GPS."""
+  return {r for r in all_rules(actions) if r[0] != "S_nofix"}
 
 
 def test_turn_ahead_requests_experimental_within_lookahead():
   s = HotspotShadow()
   assert ("N_turn", "experimental") in rules(s.evaluate(0, Nav("turn", "right", 70, "Main St"), None, 5, False, False))
-  assert not s.evaluate(1, Nav("turn", "right", 300, "Main St"), None, 5, False, False)
+  assert not rules(s.evaluate(1, Nav("turn", "right", 300, "Main St"), None, 5, False, False))
   # 8 s of lookahead at 20 m/s
   assert ("N_turn", "experimental") in rules(s.evaluate(2, Nav("turn", "left", 150, "x"), None, 20, False, False))
 
@@ -41,8 +46,8 @@ def test_after_exit_window_only_when_the_ramp_was_taken():
 def test_exit_lane_change_needs_matching_signal():
   s = HotspotShadow()
   nav = Nav("off ramp", "right", 200, "Take exit 28B")
-  assert not s.evaluate(0, nav, None, 25, False, False)
-  assert not s.evaluate(0, nav, None, 25, True, False)
+  assert not rules(s.evaluate(0, nav, None, 25, False, False))
+  assert not rules(s.evaluate(0, nav, None, 25, True, False))
   assert ("N_exit", "lane_change_extra") in rules(s.evaluate(0, nav, None, 25, False, True))
 
 
@@ -90,3 +95,45 @@ def test_load_spots_tolerates_bad_input(tmp_path):
 
 def test_distance():
   assert abs(distance_m(LAT, LON, LAT + NORTH_10M, LON) - 10) < 0.1
+
+
+def test_turn_takeover_alert_only_for_real_turns():
+  s = HotspotShadow()
+  assert ("N_turn", "alert") in rules(s.evaluate(0, Nav("turn", "right", 60, "x"), None, 8, False, False))
+  assert ("N_turn", "alert") in rules(s.evaluate(0, Nav("turn", "uturn", 30, "x"), None, 3, False, False))
+  out = rules(s.evaluate(0, Nav("turn", "slight right", 60, "x"), None, 8, False, False))
+  assert ("N_turn", "experimental") in out and ("N_turn", "alert") not in out
+  assert ("N_turn", "alert") not in rules(s.evaluate(0, Nav("fork", "left", 60, "x"), None, 8, False, False))
+
+
+def test_start_without_fix_is_conservative_until_the_first_fix():
+  nofix = {("S_nofix", "experimental"), ("S_nofix", "speed_cap")}
+  s = HotspotShadow()
+  assert nofix <= all_rules(s.evaluate(0, None, None, 5, False, False))
+  assert nofix <= all_rules(s.evaluate(1, None, Gps(LAT, LON, 0.0, 50.0), 5, False, False))  # inaccurate fix does not count
+  assert not all_rules(s.evaluate(2, None, Gps(LAT, LON, 90.0, 3.0), 5, False, False))      # good fix
+  assert not all_rules(s.evaluate(3, None, None, 5, False, False))                          # never again this drive
+  assert not all_rules(HotspotShadow().evaluate(0, None, None, 0.5, False, False))          # parked
+  late = HotspotShadow()
+  late.evaluate(0, None, None, 0, False, False)
+  assert not all_rules(late.evaluate(200, None, None, 5, False, False))
+
+
+def test_night_only_spots_skip_daylight():
+  from openpilot.starpilot.rav4.hotspots import sun_elevation_deg
+  noon = 1795744800000   # 2026-11-26 20:00 UTC; local noon at -150 deg is ~22:00 UTC
+  night = 1795780800000  # 2026-11-27 06:00 UTC
+  assert sun_elevation_deg(LAT, LON, noon) > 0 > sun_elevation_deg(LAT, LON, night)
+  assert sun_elevation_deg(LAT, LON, 0) is None
+  s = HotspotShadow([spot(action="hidden_light", night_only=True)])
+  assert not rules(s.evaluate(0, None, Gps(LAT, LON, 0.0, 2.0, noon), 5, False, False))
+  assert ("H01", "alert") in rules(s.evaluate(1, None, Gps(LAT, LON, 0.0, 2.0, night), 5, False, False))
+  assert ("H01", "alert") in rules(s.evaluate(2, None, Gps(LAT, LON, 0.0, 2.0, 0), 5, False, False))  # no time: keep
+
+
+def test_settings_defaults_and_overrides(tmp_path):
+  from openpilot.starpilot.rav4.hotspots import load_settings
+  assert load_settings(str(tmp_path / "missing.json")) == {"live_alerts": True, "turn_alerts": True}
+  f = tmp_path / "h.json"
+  f.write_text(json.dumps({"turn_alerts": False, "live_alerts": "yes"}))
+  assert load_settings(str(f)) == {"live_alerts": True, "turn_alerts": False}
