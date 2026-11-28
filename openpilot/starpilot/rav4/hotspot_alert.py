@@ -14,6 +14,7 @@ ALERT_PATH = os.environ.get("RAV4_HOTSPOT_ALERT", "/dev/shm/rav4_hotspot_alert.j
 FINGERPRINT = "TOYOTA_RAV4_TSS2_2023"
 MAX_AGE_NS = 1_000_000_000
 READ_EVERY_NS = 200_000_000
+CHIME_NS = 1_000_000_000  # keep the prompt sound in selfdriveState this long so soundd surely plays it once
 ALERT_TYPE = "rav4Hotspot/notification"
 EVENT_TYPE = "rav4HotspotNotification"
 
@@ -61,6 +62,8 @@ class HotspotAlert:
     self.alert = None
     self.alert_key = None
     self.chimed_key = None
+    self.presented_key = None
+    self.presented_ns = 0
 
   def _read(self, now_ns):
     if now_ns - self.last_read_ns < READ_EVERY_NS:
@@ -98,10 +101,16 @@ class HotspotAlert:
       self.alert, self.alert_key = None, None
       return None
 
-  def selected(self, current):
-    """After the AlertManager picked: chime once per hotspot alert, then stay silent for it."""
+  def selected(self, current, now_ns: int | None = None):
+    """After the AlertManager picked: the sound stays on for CHIME_NS from the first frame this alert is shown
+    (selfdriveState is published after this call, so muting at once would never chime), then it is muted."""
     try:
-      if self.alert is not None and current is not None and current.alert_type == ALERT_TYPE:
+      if self.alert is None or current is None or current.alert_type != ALERT_TYPE:
+        return
+      now_ns = time.monotonic_ns() if now_ns is None else now_ns
+      if self.presented_key != self.alert_key:
+        self.presented_key, self.presented_ns = self.alert_key, now_ns
+      elif now_ns - self.presented_ns >= CHIME_NS:
         from openpilot.selfdrive.selfdrived.events import AudibleAlert
         self.chimed_key = self.alert_key
         self.alert.audible_alert = AudibleAlert.none

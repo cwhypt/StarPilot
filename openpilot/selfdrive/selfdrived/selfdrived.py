@@ -1376,7 +1376,7 @@ class SelfdriveD:
         selected.audible_alert == log.SelfdriveState.AudibleAlert.prompt),
       requested_until_ns=getattr(self, 'aol_availability_chime_until_ns', 0))
     recovery.selected(self.AM.current_alert)
-    self.rav4_hotspot_alert.selected(self.AM.current_alert)
+    self.rav4_hotspot_alert.selected(self.AM.current_alert, time.monotonic_ns())
 
   def ordinary_source_availability(self, CS, now_ns, native=None):
     """Classify lost host source; never renew a command or change engagement."""

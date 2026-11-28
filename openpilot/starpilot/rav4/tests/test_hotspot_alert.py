@@ -22,8 +22,12 @@ def test_reader_shows_fresh_alert_once_with_one_chime(tmp_path):
   write_alert("turn_takeover", {"modifier": "right", "dist_m": 70}, "N_turn:turn_takeover:1.0", path, now_ns=2 * 10**9)
   a = r.update(2 * 10**9 + 3 * 10**8)
   assert a is not None and a.alert_type == ALERT_TYPE and a.audible_alert == AudibleAlert.prompt
-  r.selected(a)
-  assert a.audible_alert == AudibleAlert.none
+  r.selected(a, 2 * 10**9 + 3 * 10**8)
+  assert a.audible_alert == AudibleAlert.prompt         # still sounding when selfdriveState is published
+  r.selected(a, 2 * 10**9 + 8 * 10**8)
+  assert a.audible_alert == AudibleAlert.prompt
+  r.selected(a, 3 * 10**9 + 4 * 10**8)
+  assert a.audible_alert == AudibleAlert.none           # muted after 1 s
   assert r.update(2 * 10**9 + 6 * 10**8) is a          # same alert, no new chime
   assert r.update(4 * 10**9) is None                    # stale after 1 s
   write_alert(None, None, "", path, now_ns=5 * 10**9)
@@ -61,6 +65,7 @@ def test_picker_shows_each_alert_for_a_few_seconds_and_respects_switches():
 def test_alert_manager_shows_it_and_clears_it(tmp_path):
   from openpilot.selfdrive.selfdrived.alertmanager import AlertManager
   from openpilot.selfdrive.selfdrived.events import EmptyAlert
+  from openpilot.selfdrive.selfdrived.events import AudibleAlert
   from openpilot.starpilot.rav4.hotspot_alert import EVENT_TYPE
   path = str(tmp_path / "a.json")
   r, am = HotspotAlert(RAV4, path), AlertManager()
@@ -71,7 +76,9 @@ def test_alert_manager_shows_it_and_clears_it(tmp_path):
     clear = set() if a is not None else {EVENT_TYPE}
     am.add_many(frame, [a] if a is not None else [])
     am.process_alerts(frame, clear)
-    r.selected(am.current_alert)
+    r.selected(am.current_alert, now)
+    if frame == 0:
+      assert am.current_alert.audible_alert != AudibleAlert.none   # what selfdriveState publishes on the first frame
   assert am.current_alert.alert_text_1 == "Turn ahead: take over steering"
   write_alert(None, None, "", path, now_ns=2 * 10**9)
   for frame in range(20, 400):
