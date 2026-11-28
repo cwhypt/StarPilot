@@ -101,6 +101,9 @@ def test_turn_takeover_alert_only_for_real_turns():
   s = HotspotShadow()
   assert ("N_turn", "alert") in rules(s.evaluate(0, Nav("turn", "right", 60, "x"), None, 8, False, False))
   assert ("N_turn", "alert") in rules(s.evaluate(0, Nav("turn", "uturn", 30, "x"), None, 3, False, False))
+  assert ("N_turn", "alert") not in rules(s.evaluate(0, Nav("turn", "uturn", 0, "x"), None, 3, False, False))  # reroute
+  assert ("N_turn", "alert") not in rules(s.evaluate(0, Nav("turn", "right", 2, "x"), None, 3, False, False))
+  assert ("N_turn", "experimental") in rules(s.evaluate(0, Nav("turn", "right", 2, "x"), None, 3, False, False))
   out = rules(s.evaluate(0, Nav("turn", "slight right", 60, "x"), None, 8, False, False))
   assert ("N_turn", "experimental") in out and ("N_turn", "alert") not in out
   assert ("N_turn", "alert") not in rules(s.evaluate(0, Nav("fork", "left", 60, "x"), None, 8, False, False))

@@ -37,6 +37,8 @@ AFTER_EXIT_MIN_SPEED = 4.0   # m/s
 AFTER_EXIT_CAP_MPH = 25.0
 MPH = 0.44704
 TAKEOVER_MODIFIERS = ("left", "right", "sharp left", "sharp right", "uturn")  # EPS limits LTA to ~95 deg of wheel
+TAKEOVER_MIN_DIST_M = 5.0    # "turn in 0 m" left over at/after the turn is not worth a chime
+UTURN_MIN_DIST_M = 15.0      # a reroute's "make a U-turn" sits at 0-4 m (0000001c rt147-172): not a planned U-turn
 START_NOFIX_S = 180.0        # start of drive without a GPS fix yet (garage exit): conservative until the fix
 START_NOFIX_CAP_MPH = 15.0
 SUN_DAY_ELEVATION_DEG = -2.0  # above this the sun counts as up (after sunrise / before civil dusk deepens)
@@ -220,7 +222,8 @@ class HotspotShadow:
       if nav.maneuver_type in TURN_TYPES and nav.distance_m <= max(TURN_MIN_LOOKAHEAD_M, v * TURN_LOOKAHEAD_S):
         actions.append(Action("N_turn", "experimental", {"type": nav.maneuver_type, "modifier": nav.modifier,
                                                          "dist_m": round(nav.distance_m)}))
-        if nav.maneuver_type == "turn" and nav.modifier in TAKEOVER_MODIFIERS:
+        min_dist = UTURN_MIN_DIST_M if nav.modifier == "uturn" else TAKEOVER_MIN_DIST_M
+        if nav.maneuver_type == "turn" and nav.modifier in TAKEOVER_MODIFIERS and nav.distance_m >= min_dist:
           actions.append(Action("N_turn", "alert", {"kind": "turn_takeover", "modifier": nav.modifier,
                                                     "dist_m": round(nav.distance_m)}))
       is_exit = nav.maneuver_type in ("off ramp", "fork") or "exit" in nav.text.lower()
