@@ -140,3 +140,12 @@ def test_settings_defaults_and_overrides(tmp_path):
   f = tmp_path / "h.json"
   f.write_text(json.dumps({"turn_alerts": False, "live_alerts": "yes"}))
   assert load_settings(str(f)) == {"live_alerts": True, "turn_alerts": False}
+
+
+def test_manual_turn_spot_alerts_only_when_moving():
+  s = HotspotShadow([spot(action="manual_turn")])
+  g = Gps(LAT, LON, 0.0, 2.0)
+  moving = rules(s.evaluate(0, None, g, 5, False, False))
+  assert {("H01", "manual_turn"), ("H01", "alert")} <= moving
+  crawling = rules(HotspotShadow([spot(action="manual_turn")]).evaluate(0, None, g, 1.0, False, False))
+  assert ("H01", "manual_turn") in crawling and ("H01", "alert") not in crawling

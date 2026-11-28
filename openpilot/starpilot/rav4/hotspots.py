@@ -41,6 +41,7 @@ TAKEOVER_MIN_DIST_M = 5.0    # "turn in 0 m" left over at/after the turn is not 
 UTURN_MIN_DIST_M = 15.0      # a reroute's "make a U-turn" sits at 0-4 m (0000001c rt147-172): not a planned U-turn
 START_NOFIX_S = 180.0        # start of drive without a GPS fix yet (garage exit): conservative until the fix
 START_NOFIX_CAP_MPH = 15.0
+MANUAL_ALERT_MIN_SPEED = 2.0  # m/s; crawling through a parking lot needs no chime for a manual-turn spot
 SUN_DAY_ELEVATION_DEG = -2.0  # above this the sun counts as up (after sunrise / before civil dusk deepens)
 
 
@@ -168,7 +169,7 @@ def load_spots(path=HOTSPOT_PATH):
     return []
 
 
-def _spot_actions(spot: Spot):
+def _spot_actions(spot: Spot, v: float = 0.0):
   """Map a spot's action string to the conservative actions it would take."""
   out = []
   for part in spot.action.split("+"):
@@ -182,6 +183,8 @@ def _spot_actions(spot: Spot):
         out.append(("speed_cap", {"cap_mph": spot.cap_mph}))
     elif part in ("manual_turn", "manual_zone"):
       out.append(("manual_turn", {"kind": part}))
+      if v >= MANUAL_ALERT_MIN_SPEED:
+        out.append(("alert", {"kind": part}))
     elif part == "stopline":
       out.append(("stopline", {"offset_ft": spot.offset_ft or 0.0}))
     elif part in ("no_lane_change_left", "no_lane_change_right"):
@@ -249,7 +252,7 @@ class HotspotShadow:
         d = distance_m(gps.lat, gps.lon, spot.lat, spot.lon)
         ahead = angle_diff(bearing_deg(gps.lat, gps.lon, spot.lat, spot.lon), gps.bearing) <= SPOT_AHEAD_TOL_DEG
         if d <= spot.radius_m or (ahead and d <= spot.radius_m + v * SPOT_LEAD_S):
-          for kind, detail in _spot_actions(spot):
+          for kind, detail in _spot_actions(spot, v):
             actions.append(Action(spot.id, kind, dict(detail, dist_m=round(d), enabled=spot.enabled)))
     return actions
 
