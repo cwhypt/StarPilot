@@ -8,7 +8,8 @@ the control actions stay log-only. Stale or inaccurate navigation/GPS data means
 Hotspot file (private, never in the repo): /data/rav4_hotspots.json, the `hotspots_v2.json` format:
   {"version": 2, "spots": [{"id", "name", "action", "lat", "lon", "heading", "radius_m", "heading_tol_deg",
    "cap_mph"?, "offset_ft"?, "only_without_navigation"?, "night_only"?, "enabled"}],
-   "live_alerts"?: true, "turn_alerts"?: true, ...}
+   "live_alerts"?: true, "turn_alerts"?: true, "control_rules"?: ["S_nofix", ...], ...}
+Control actions take effect only for spots with "enabled": true and rules listed in "control_rules".
 """
 from __future__ import annotations
 
@@ -26,6 +27,7 @@ GPS_MAX_AGE_S = 1.5
 GPS_MAX_ACCURACY_M = 15.0
 SPOT_LEAD_S = 6.0            # also match a spot this many seconds before reaching it
 SPOT_AHEAD_TOL_DEG = 60.0    # the spot must be roughly ahead to count before reaching it
+SPOT_PASSED_M = 15.0         # behind the car and farther than this: passed (alerts/logs go on, control stops)
 
 TURN_TYPES = ("turn", "end of road", "fork", "rotary", "roundabout")
 TURN_MIN_LOOKAHEAD_M = 80.0
@@ -127,16 +129,22 @@ def sun_elevation_deg(lat, lon, unix_ms):
   return math.degrees(math.asin(math.sin(la) * math.sin(dec) + math.cos(la) * math.cos(dec) * math.cos(ha)))
 
 
+CONTROL_RULES = ("S_nofix", "N_turn", "N_after_exit")  # non-spot rules the hotspot file may enable for control
+
+
 def load_settings(path=HOTSPOT_PATH):
   """Top-level switches of the hotspot file; defaults when missing or malformed."""
-  out = {"live_alerts": True, "turn_alerts": True}
+  out = {"live_alerts": True, "turn_alerts": True, "control_rules": []}
   try:
     if os.path.isfile(path) and os.path.getsize(path) <= MAX_FILE_BYTES:
       with open(path, encoding="utf-8") as f:
         doc = json.load(f)
-      for key in out:
+      for key in ("live_alerts", "turn_alerts"):
         if isinstance(doc.get(key), bool):
           out[key] = doc[key]
+      rules = doc.get("control_rules")
+      if isinstance(rules, list):
+        out["control_rules"] = [r for r in rules if isinstance(r, str) and r in CONTROL_RULES]
   except (OSError, ValueError, AttributeError):
     pass
   return out
@@ -252,8 +260,9 @@ class HotspotShadow:
         d = distance_m(gps.lat, gps.lon, spot.lat, spot.lon)
         ahead = angle_diff(bearing_deg(gps.lat, gps.lon, spot.lat, spot.lon), gps.bearing) <= SPOT_AHEAD_TOL_DEG
         if d <= spot.radius_m or (ahead and d <= spot.radius_m + v * SPOT_LEAD_S):
+          passed = not ahead and d > SPOT_PASSED_M
           for kind, detail in _spot_actions(spot, v):
-            actions.append(Action(spot.id, kind, dict(detail, dist_m=round(d), enabled=spot.enabled)))
+            actions.append(Action(spot.id, kind, dict(detail, dist_m=round(d), enabled=spot.enabled, passed=passed)))
     return actions
 
 

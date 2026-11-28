@@ -111,6 +111,23 @@ class ProjectedScene:
   perceived_stop: bool = False
 
 
+
+_HOTSPOT_CONTROL = None
+
+
+def _hotspot_experimental(now_mono_ns, fingerprint):
+  """RAV4 hotspot Experimental request (starpilot/rav4/hotspot_control); None = no fresh request."""
+  global _HOTSPOT_CONTROL
+  try:
+    if fingerprint != "TOYOTA_RAV4_TSS2_2023":
+      return None
+    if _HOTSPOT_CONTROL is None:
+      from openpilot.starpilot.rav4.hotspot_control import ControlReader
+      _HOTSPOT_CONTROL = ControlReader()
+    return _HOTSPOT_CONTROL.experimental(int(now_mono_ns), fingerprint)
+  except Exception:
+    return None
+
 def paired_clocks_ns() -> tuple[int, int, int] | None:
   """The model camera EOF is BOOTTIME; event/receipt stamps are MONOTONIC."""
   boot_clock = getattr(time, 'CLOCK_BOOTTIME', None)
@@ -795,6 +812,7 @@ class SceneProjector:
       stop_light_detected=stop_observation.light_detected,
       standstill_stop_hold=stop_observation.standstill_hold,
       model_should_stop=model_should_stop,
+      hotspot_experimental=_hotspot_experimental(now_mono_ns, _field(cp, 'carFingerprint')),
       traffic_mode=curve_mode,
       stop_sign_confirmed=sign,
       committed_stop=self.stop_detector.committed if stop_observation.light_detected is not None else None,

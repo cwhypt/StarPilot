@@ -142,6 +142,19 @@ class ConditionalModePolicyTest(unittest.TestCase):
     self.assertEqual((stale.reason, stale.requested_experimental), (Reason.SCENE_UNAVAILABLE, False))
     self.assertEqual(policy.step(1.2, ModeChoice.CEM, ManualIntent.NONE, AUTHORITY, scene(1.2, speed=20.0), settings).reason, Reason.NO_TRIGGER)
 
+  def test_cem_hotspot_request_is_the_lowest_priority_trigger(self):
+    policy = ConditionalModePolicy()
+    settings = ModeSettings()
+    selected = policy.step(4.0, ModeChoice.CEM, ManualIntent.NONE, AUTHORITY, scene(4.0, hotspot_experimental=True), settings)
+    self.assertEqual((selected.reason, selected.status_code, selected.requested_experimental), (Reason.CEM_HOTSPOT, 6, True))
+    policy.reset()
+    selected = policy.step(4.1, ModeChoice.CEM, ManualIntent.NONE, AUTHORITY,
+                           scene(4.1, hotspot_experimental=True, stop_light_detected=True), settings)
+    self.assertEqual(selected.reason, Reason.CEM_STOP)
+    policy.reset()
+    selected = policy.step(4.2, ModeChoice.CEM, ManualIntent.NONE, AUTHORITY, scene(4.2, hotspot_experimental=None), settings)
+    self.assertFalse(selected.requested_experimental)
+
   def test_cem_scene_reasons_preserve_frozen_priority_and_status(self):
     policy = ConditionalModePolicy()
     settings = replace(ModeSettings(), cem_curves=True)

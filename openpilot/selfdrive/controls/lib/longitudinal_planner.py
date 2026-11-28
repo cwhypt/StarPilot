@@ -22,6 +22,7 @@ from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N, get_accel_
 from openpilot.selfdrive.car.cruise import V_CRUISE_MAX, V_CRUISE_UNSET
 from openpilot.common.swaglog import cloudlog
 from openpilot.starpilot.navigation.intent import NAVIGATION_BRAKE_MAGNITUDE, cruise_ceiling as navigation_ceiling
+from openpilot.starpilot.rav4.hotspot_control import planner_cap_mps as hotspot_planner_cap
 from openpilot.starpilot.car.tesla.preap_adaptive import startup_owner as preap_adaptive_owner
 from openpilot.starpilot.longitudinal.vehicle_policy import forecast_should_stop, planner_cost_owner, far_follow_owner
 from openpilot.starpilot.longitudinal.cruise_ceiling import CruiseCeiling, CurveCeiling, select_cruise_ceiling, select_curve_ceiling
@@ -155,6 +156,7 @@ class LongitudinalPlanner:
     self.j_desired_trajectory = np.zeros(CONTROL_N)
     self.last_cruise_ceiling_status = "absent"
     self.last_curve_ceiling_status = "absent"
+    self.last_hotspot_cap_mps = None
     self.last_curve_ceiling_applied = False
     self.profile_smoother = ProfileSmoother()
     self.last_profile: AppliedProfile | None = None
@@ -343,6 +345,11 @@ class LongitudinalPlanner:
     navigation_target = navigation_ceiling(sm, self.CP, sample_now_ns, v_cruise) if profile_eligible else None
     if navigation_target is not None:
       v_cruise = min(v_cruise, navigation_target)
+    # RAV4 hotspot speed cap (starpilot/rav4/hotspot_control): only enabled spots, only ever lower
+    hotspot_target = hotspot_planner_cap(self.CP, sm, sample_now_ns, v_cruise) if profile_eligible else None
+    self.last_hotspot_cap_mps = hotspot_target
+    if hotspot_target is not None:
+      v_cruise = min(v_cruise, hotspot_target)
     coast_plan = None
     if wheel_coast is not None:
       owner, wheel_params = wheel_coast

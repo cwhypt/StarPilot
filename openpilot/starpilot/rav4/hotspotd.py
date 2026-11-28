@@ -4,8 +4,9 @@
 Reads navigation, GPS and carState; logs enter/exit of every conservative action as
 cloudlog.error({"event": "rav4_hotspot", ...}) so it lands in qlog errorLogMessage. Alert actions (turn
 take-over, hard-to-see light, manual turn) are shown to the driver as a short notification through
-hotspot_alert; control actions (Experimental, speed cap, lane-change rules) stay log-only. It controls
-nothing, and runs in its own process so a failure here cannot affect planning or control.
+hotspot_alert. Control actions (Experimental, speed cap) of enabled spots / rules are handed to the planner
+through hotspot_control, which only ever makes driving more conservative; everything else is log-only.
+It runs in its own process: if it stops, the hand-off files go stale within 1 s and nothing is requested.
 """
 import os
 import time
@@ -14,6 +15,7 @@ import openpilot.cereal.messaging as messaging
 from openpilot.common.realtime import Ratekeeper
 from openpilot.common.swaglog import cloudlog
 from openpilot.starpilot.rav4.hotspot_alert import PRIORITY, write_alert
+from openpilot.starpilot.rav4.hotspot_control import control_from, write_control
 from openpilot.starpilot.rav4.hotspots import (GPS_MAX_AGE_S, HOTSPOT_PATH, MPH, NAV_MAX_AGE_S, Gps, HotspotShadow,
                                                Nav, TransitionLog, load_settings, load_spots)
 
@@ -22,6 +24,7 @@ RELOAD_S = 10.0
 ALERT_SHOW_S = 6.0
 REARM_NAV_S = 10.0   # an alert must be gone this long before it can show again (GPS/heading/nav flicker)
 REARM_SPOT_S = 30.0
+CONTROL_HOLD_S = 2.0  # keep a control request this long after it ends (GPS dropout / heading flicker)
 
 
 def nav_from(sm, now_ns):
@@ -80,7 +83,8 @@ def main():
   sm = messaging.SubMaster(['carState', 'starpilotNavigation', 'gpsLocationExternal'])
   shadow, log, picker = HotspotShadow(load_spots()), TransitionLog(), AlertPicker()
   settings = load_settings()
-  mtime, last_check, failures, shown_key = None, 0.0, 0, None
+  mtime, last_check, failures, shown_key, last_control = None, 0.0, 0, None, None
+  held, held_t = (False, None, []), -1e9
   cloudlog.error({"event": "rav4_hotspot", "phase": "start", "spots": len(shadow.spots), "path": HOTSPOT_PATH, **settings})
   rk = Ratekeeper(RATE_HZ, print_delay_threshold=None)
   while True:
@@ -110,6 +114,17 @@ def main():
       elif shown_key is not None:
         write_alert(None, None, "", now_ns=now_ns)
       shown_key = key
+      experimental, cap, rules = control_from(actions, settings)
+      if experimental or cap is not None:
+        held, held_t = (experimental, cap, rules), now
+      elif now - held_t <= CONTROL_HOLD_S:
+        experimental, cap, rules = held
+      write_control(experimental, cap, rules, now_ns=now_ns)
+      control = (experimental, None if cap is None else round(cap, 2), tuple(rules))
+      if control != last_control:
+        cloudlog.error({"event": "rav4_hotspot", "phase": "control", "experimental": experimental,
+                        "cap_mph": None if cap is None else round(cap / MPH, 1), "rules": rules, **context})
+        last_control = control
       failures = 0
     except Exception:  # must never take anything else down; log and keep going
       failures += 1

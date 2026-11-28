@@ -136,10 +136,10 @@ def test_night_only_spots_skip_daylight():
 
 def test_settings_defaults_and_overrides(tmp_path):
   from openpilot.starpilot.rav4.hotspots import load_settings
-  assert load_settings(str(tmp_path / "missing.json")) == {"live_alerts": True, "turn_alerts": True}
+  assert load_settings(str(tmp_path / "missing.json")) == {"live_alerts": True, "turn_alerts": True, "control_rules": []}
   f = tmp_path / "h.json"
   f.write_text(json.dumps({"turn_alerts": False, "live_alerts": "yes"}))
-  assert load_settings(str(f)) == {"live_alerts": True, "turn_alerts": False}
+  assert load_settings(str(f)) == {"live_alerts": True, "turn_alerts": False, "control_rules": []}
 
 
 def test_manual_turn_spot_alerts_only_when_moving():
@@ -149,3 +149,19 @@ def test_manual_turn_spot_alerts_only_when_moving():
   assert {("H01", "manual_turn"), ("H01", "alert")} <= moving
   crawling = rules(HotspotShadow([spot(action="manual_turn")]).evaluate(0, None, g, 1.0, False, False))
   assert ("H01", "manual_turn") in crawling and ("H01", "alert") not in crawling
+
+
+def test_settings_control_rules(tmp_path):
+  from openpilot.starpilot.rav4.hotspots import load_settings
+  f = tmp_path / "h.json"
+  f.write_text(json.dumps({"control_rules": ["S_nofix", "bogus", 3]}))
+  assert load_settings(str(f))["control_rules"] == ["S_nofix"]
+
+
+def test_spot_behind_the_car_is_marked_passed():
+  s = HotspotShadow([spot(radius_m=60.0)])
+  behind = Gps(LAT + 3 * NORTH_10M, LON, 0.0, 2.0)  # 30 m past it, heading on
+  out = s.evaluate(0, None, behind, 5, False, False)
+  assert out and all(a.detail["passed"] for a in out if a.rule == "H01")
+  near = s.evaluate(1, None, Gps(LAT + 1 * NORTH_10M, LON, 0.0, 2.0), 5, False, False)  # 10 m past: not yet
+  assert not any(a.detail["passed"] for a in near if a.rule == "H01")

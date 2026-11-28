@@ -55,6 +55,7 @@ class Reason(StrEnum):
   CEM_STOP = 'cem_stop'
   CEM_SPEED_LIMIT = 'cem_speed_limit'  # Historical route labels only.
   CEM_HOLD = 'cem_hold'
+  CEM_HOTSPOT = 'cem_hotspot'  # an enabled RAV4 hotspot (starpilot/rav4) asks for Experimental
   CCM_SPEED = 'ccm_speed'
   CCM_LEAD = 'ccm_lead'
   CCM_LAUNCH = 'ccm_launch'
@@ -114,6 +115,7 @@ class SceneEvidence:
   launch_forced_exit: bool | None = None
   launch_lead: bool | None = None
   model_should_stop: bool | None = None
+  hotspot_experimental: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -411,6 +413,8 @@ class ConditionalModePolicy:
       return Reason.CEM_LEAD
     if settings.cem_stop and (scene.stop_light_detected is True or scene.forcing_stop is True):
       return Reason.CEM_STOP
+    if scene.hotspot_experimental is True:
+      return Reason.CEM_HOTSPOT
     return None
 
   def _cem(self, now_s: float, authority: Authority, warm: bool, scene: SceneEvidence, settings: ModeSettings) -> Decision:
@@ -517,6 +521,7 @@ class ConditionalModePolicy:
       Reason.CEM_SIGNAL: 5,
       Reason.CEM_SPEED: 6,
       Reason.CEM_OPEN_ROAD: 6,
+      Reason.CEM_HOTSPOT: 6,
       Reason.CEM_STOP: 8,
     }.get(status_reason, 0)
     return self._decision(self.cem_active, authority, True, warm, reason, status)
