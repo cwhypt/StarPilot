@@ -706,7 +706,8 @@ def main(demo=False):
       modelv2_send.modelV2.meta.laneChangeDirection = DH.lane_change_direction
 
       phase = {"manualRequired": StatusPhase.MANUAL_REQUIRED, "waitingForDelay": StatusPhase.WAITING_FOR_DELAY,
-               "laneUnavailable": StatusPhase.LANE_UNAVAILABLE, "blindspotBlocked": StatusPhase.BLINDSPOT_BLOCKED}[DH.auto_status]
+               "laneUnavailable": StatusPhase.LANE_UNAVAILABLE, "blindspotBlocked": StatusPhase.BLINDSPOT_BLOCKED,
+               "roadEdgeBlocked": StatusPhase.ROAD_EDGE_BLOCKED}[DH.auto_status]
       status_direction = (StatusDirection.LEFT if DH.lane_change_direction == log.LaneChangeDirection.left else
                           StatusDirection.RIGHT if DH.lane_change_direction == log.LaneChangeDirection.right else StatusDirection.NONE)
       lane_status = LaneChangeStatus(lane_status_session, lane_status_sequence,

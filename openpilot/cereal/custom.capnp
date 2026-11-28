@@ -1066,6 +1066,7 @@ struct AolAxisState @0xfc6241ed8877b611 {
       waitingForDelay @1;
       laneUnavailable @2;
       blindspotBlocked @3;
+      roadEdgeBlocked @4;
     }
 
     enum Direction {

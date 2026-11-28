@@ -24,6 +24,7 @@ class Phase(IntEnum):
   WAITING_FOR_DELAY = 1
   LANE_UNAVAILABLE = 2
   BLINDSPOT_BLOCKED = 3
+  ROAD_EDGE_BLOCKED = 4  # road-edge guard: a driver nudge does not start it either, so no "steer to confirm"
 
 
 class Direction(IntEnum):
@@ -129,4 +130,5 @@ def alert_wording(status: LaneChangeStatus | None, model, now_mono_ns: int, recv
   return {Phase.MANUAL_REQUIRED: None,
           Phase.WAITING_FOR_DELAY: ("Automatic Lane Change Pending", "Check surroundings; steer to confirm now"),
           Phase.LANE_UNAVAILABLE: ("Automatic Change Unavailable", "Steer to confirm when safe"),
-          Phase.BLINDSPOT_BLOCKED: ("Car Detected in Blindspot", "")}[status.phase]
+          Phase.BLINDSPOT_BLOCKED: ("Car Detected in Blindspot", ""),
+          Phase.ROAD_EDGE_BLOCKED: ("Lane Change Blocked", "Road edge or curb on that side")}[status.phase]

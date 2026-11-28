@@ -100,7 +100,7 @@ class DesireHelper:
         if blindspot_detected:
           self.auto_status = "blindspotBlocked"
         elif road_edge_blocked:
-          self.auto_status = "laneUnavailable"
+          self.auto_status = "roadEdgeBlocked"  # nudges are refused too (below), unlike laneUnavailable
         elif self.policy.auto_lane_change and engaged:
           self.auto_status = "waitingForDelay" if auto_evidence and not self.auto_signal_blocked else "laneUnavailable"
 

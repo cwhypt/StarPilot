@@ -69,7 +69,7 @@ def test_driver_nudge_is_held_while_edge_is_close_then_allowed():
   assert dh.lane_change_state == LCS.preLaneChange
   run(dh, carstate(torque=150., pressed=True), 5, road_edge_blocked=True)
   assert dh.lane_change_state == LCS.preLaneChange
-  assert dh.auto_status == "laneUnavailable"
+  assert dh.auto_status == "roadEdgeBlocked"
   run(dh, carstate(torque=150., pressed=True), 1, road_edge_blocked=False)
   assert dh.lane_change_state == LCS.laneChangeStarting
 
