@@ -17,6 +17,8 @@ from openpilot.starpilot.speed_limits import speed_domain as sd
 from openpilot.starpilot.speed_limits.runtime_settings import ADVANCE_SECONDS, Settings
 from openpilot.starpilot.speed_limits.map_observation import MapSource, copy_frame
 from openpilot.starpilot.speed_limits.advance import Advance
+from openpilot.starpilot.speed_limits.highway_exit import HighwayExit
+from openpilot.starpilot.navigation.intent import current_instruction
 from openpilot.starpilot.speed_limits.vision.observation import clock_pair_ns, vision_observation
 
 
@@ -133,6 +135,7 @@ class Runtime:
   def _start_session(self, session_id: str, previous_limit: acc.AcceptedLimit | None) -> None:
     """Every per-drive field. Settings and Vision qualification deliberately survive a reset."""
     self.session_id = session_id
+    self.highway_exit = HighwayExit()
     try:
       self.state = comp.new_session(session_id, previous_limit)
     except ValueError:
@@ -502,7 +505,8 @@ class Runtime:
         cruise_event.producer_session == str(sm['slcDashboardObservation'].producerSessionId)):
       wheel_since = cruise_event.wheel_override_since_ns
     frame = self._frame(sm, CP, now_ns, now_boot_ns, action, adopt, classified, wheel_override_blocked=wheel_override_blocked)
-    frame = replace(frame, confirmation_grace_ns=confirmation_grace_ns, wheel_override_since_ns=wheel_since)
+    frame = replace(frame, confirmation_grace_ns=confirmation_grace_ns, wheel_override_since_ns=wheel_since,
+                    highway_exit=self.highway_exit.update(current_instruction(sm, now_ns)))
     result = comp.step(self.state, frame)
     self.state = result.state
     self.advance.observe(result)

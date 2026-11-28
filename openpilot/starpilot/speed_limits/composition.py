@@ -41,6 +41,7 @@ class Frame:
   confirmation_started_ns: int | None = None
   pedal_override: PedalOverride = PedalOverride.OFF
   preview_reverted: bool = False
+  highway_exit: bool = False
   confirmation_grace_ns: int = 0
   wheel_override_enabled: bool = False
   wheel_override_blocked: bool = False
@@ -184,7 +185,8 @@ def step(state: State, frame: Frame) -> Result:
   clear_override = frame.preview_reverted or acceptance.basis in ('driver_accept', 'driver_adopt')
   clear_wheel = clear_override or state.acceptance.accepted != acceptance.state.accepted
   wheel_metric = state.wheel_override_metric if frame.wheel_override_enabled and not clear_wheel else None
-  previous = 0. if clear_override else state.pedal_target_mps
+  # A navigation-confirmed freeway exit ends a held pedal speed (see highway_exit.py).
+  previous = 0. if clear_override or frame.highway_exit else state.pedal_target_mps
   pedal_blocked = (state.pedal_blocked_until_release or clear_override) and (
     frame.pedal_pressed is not False or ego.status is not sd.DomainStatus.VALID)
   base = replace(base, pedal_blocked_until_release=pedal_blocked)
