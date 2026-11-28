@@ -10,6 +10,10 @@ from openpilot.selfdrive.modeld.constants import ModelConstants
 # road edge (median 3.5-7 m on recorded drives). Medians, gore strips and curbs beside
 # the lane measured 0.5-1.7 m. 2.5 m sits between the two with margin either side.
 ROAD_EDGE_MIN_CLEARANCE_M = 2.5
+# While navigation guides toward the signaled side, a newly opened lane (ramp add lane, right-turn pocket)
+# reads only 1.3-2.6 m (0000001e rt951-955). Curbs/walls seen in the same guided situations read 0.2-1.4 m
+# (00000013 rt343-351, 00000014 rt970-977), so 1.8 m still refuses them.
+ROAD_EDGE_GUIDED_MIN_CLEARANCE_M = 1.8
 
 
 def _points(line):

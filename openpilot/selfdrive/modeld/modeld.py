@@ -41,7 +41,8 @@ from openpilot.system.camerad.cameras.nv12_info import get_nv12_info
 from openpilot.common.transformations.model import get_warp_matrix
 from openpilot.selfdrive.controls.lib.desire_helper import DesireHelper
 from openpilot.starpilot.lateral.lane_change_preferences import LiveLaneChangePolicy
-from openpilot.starpilot.lateral.adjacent_lane_evidence import road_edge_too_close
+from openpilot.starpilot.lateral.adjacent_lane_evidence import (ROAD_EDGE_GUIDED_MIN_CLEARANCE_M, ROAD_EDGE_MIN_CLEARANCE_M,
+                                                                road_edge_too_close)
 from openpilot.starpilot.lateral.auto_lane_change import (
   ClockEpochGuard, auto_evidence, auto_trigger_engaged, paired_clocks_ns, session_policy, steering_capable,
 )
@@ -54,7 +55,7 @@ from openpilot.starpilot.car.hyundai.model_smoothing import seconds as kona_smoo
 from openpilot.starpilot.models.status import ModelVariant
 from openpilot.starpilot.models.startup import report_load_timeout, wait_for_chestnut_power
 from openpilot.starpilot.models.recovery import STARTUP_FALLBACK_EXIT
-from openpilot.starpilot.navigation.intent import TurnIntent, matching_turn_signal, navigation_guiding
+from openpilot.starpilot.navigation.intent import TurnIntent, guided_toward, matching_turn_signal, navigation_guiding
 from openpilot.starpilot.models.catalog import BUNDLED_CURRENT, BY_ID, DEFAULT_SMALL, DEFAULT_SMALL_SHA256
 from openpilot.starpilot.models.runner import CatalogModelState, load_verified_model
 from openpilot.starpilot.models import jetlink_adapter
@@ -693,7 +694,9 @@ def main(demo=False):
                 auto_evidence=auto_ready, engaged=auto_trigger_engaged(sm, runtime_lane_policy,
                   openpilot_longitudinal=bool(CP.openpilotLongitudinalControl), now_mono_ns=mono_now_ns),
                 navigation_turn=signal_turn or matching_turn_signal(sm, mono_now_ns, supported=navigation_turn.automatic_turn_enabled),
-                road_edge_blocked=road_edge_too_close(modelv2_send.modelV2, direction),
+                road_edge_blocked=road_edge_too_close(modelv2_send.modelV2, direction,
+                  ROAD_EDGE_GUIDED_MIN_CLEARANCE_M if guided_toward(sm, mono_now_ns, direction,
+                    supported=navigation_turn.automatic_turn_enabled) else ROAD_EDGE_MIN_CLEARANCE_M),
                 navigation_guiding=navigation_guiding(sm, mono_now_ns, supported=navigation_turn.automatic_turn_enabled))
       modelv2_send.modelV2.meta.laneChangeState = DH.lane_change_state
       modelv2_send.modelV2.meta.laneChangeDirection = DH.lane_change_direction

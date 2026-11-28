@@ -284,3 +284,20 @@ def test_navigation_guiding_needs_support_and_a_fresh_route(sm):
   assert not navigation_guiding(sm, NOW, supported=False)
   sm['starpilotNavigation'].navigation.status = 'arrived'
   assert not navigation_guiding(sm, NOW, supported=True)
+
+
+@pytest.mark.parametrize('modifier,distance,direction,expected', [
+  ('right', 188., 1, True), ('slightRight', 300., 1, True), ('right', 188., -1, False),
+  ('left', 72., -1, True), ('right', 450., 1, False), ('straight', 50., 1, False)])
+def test_guided_toward_matches_side_and_distance(sm, modifier, distance, direction, expected):
+  # 0000001e rt945: "turn right 188 m" with the right signal on while a turn lane opened on the ramp
+  from openpilot.starpilot.navigation.intent import guided_toward
+  sm['starpilotNavigation'].navigation.instruction = NS(maneuverType='turn', maneuverModifier=modifier, distanceMeters=distance)
+  assert guided_toward(sm, NOW, direction, supported=True) == expected
+  assert not guided_toward(sm, NOW, direction, supported=False)
+
+
+def test_guided_toward_needs_guiding(sm):
+  from openpilot.starpilot.navigation.intent import guided_toward
+  sm['starpilotNavigation'].navigation.status = 'routing'
+  assert not guided_toward(sm, NOW, 1, supported=True)

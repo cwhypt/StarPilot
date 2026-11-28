@@ -93,6 +93,22 @@ def navigation_guiding(sm, now_ns: int, *, supported: bool) -> bool:
   return supported and current_instruction(sm, now_ns) is not None
 
 
+GUIDED_SIDE_MAX_M = 400.
+_LEFT = ('left', 'slightLeft', 'sharpLeft')
+_RIGHT = ('right', 'slightRight', 'sharpRight')
+
+
+def guided_toward(sm, now_ns: int, direction: int, *, supported: bool) -> bool:
+  """Navigation's next maneuver (turn, ramp, fork...) is on the signaled side (-1 left, 1 right) within 400 m."""
+  nav = current_instruction(sm, now_ns) if supported and direction in (-1, 1) else None
+  if nav is None:
+    return False
+  instruction = nav.instruction
+  side = _LEFT if direction == -1 else _RIGHT
+  return (instruction.maneuverModifier in side and math.isfinite(instruction.distanceMeters) and
+          0. <= instruction.distanceMeters <= GUIDED_SIDE_MAX_M)
+
+
 def _matching_turn(sm, now_ns: int, supported: bool):
   """(vEgo, distance) of a navigation turn the turn signal points at, else None."""
   nav = current_instruction(sm, now_ns) if supported else None

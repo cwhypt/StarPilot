@@ -81,3 +81,14 @@ def test_auto_lane_change_is_held_while_edge_is_close():
   assert dh.lane_change_state == LCS.preLaneChange
   run(dh, carstate(), 2, auto_evidence=True, engaged=True)
   assert dh.lane_change_state == LCS.laneChangeStarting
+
+
+def test_guided_threshold_admits_new_turn_lane_but_not_recorded_curbs():
+  from openpilot.starpilot.lateral.adjacent_lane_evidence import ROAD_EDGE_GUIDED_MIN_CLEARANCE_M as GUIDED
+  # 0000001e rt951-955: ramp add-lane to a right-turn pocket read 1.9-2.6 m most frames
+  for clearance in (1.9, 2.0, 2.3):
+    assert road_edge_too_close(model(right_edge=1.8 + clearance), 1)
+    assert not road_edge_too_close(model(right_edge=1.8 + clearance), 1, GUIDED)
+  # guided curbs/walls 00000013 rt343-351 and 00000014 rt970-977, and drive b medians, stay refused
+  for clearance in (0.2, 0.4, 0.7, 1.0, 1.4, 1.72):
+    assert road_edge_too_close(model(right_edge=1.8 + clearance), 1, GUIDED)
