@@ -1,6 +1,6 @@
 # TODO（7.0 分支，rav4h-alpha-long-radar-on-7.0）
 
-更新：2026-11-26。行程分析笔记在 `D:\StarPilot\comma_routes\_notes\`（Windows）/ 用户 Mac 的 `~/Downloads/comma_routes/_notes/`（每趟一份，先读那里）。
+更新：2026-11-27。行程分析笔记在 `D:\StarPilot\comma_routes\_notes\`（Windows）/ 用户 Mac 的 `~/Downloads/comma_routes/_notes/`（每趟一份，先读那里）。
 
 | # | 任务 | 状态 | 依据 |
 |---|---|---|---|
@@ -10,10 +10,13 @@
 | P2a | **热点第一步上线（提醒）**：`rav4_hotspotd` 的 alert 动作直接给驾驶员小提示 + 一声 prompt（导航左/右/急转/掉头转弯前约 7–9 s“Turn ahead: take over steering”，因为 EPS 只接受约 95° 方向盘角，路口转弯都要驾驶员完成；隐蔽红灯、手动转弯热点）。只是提示，不改转向/油门/刹车；热点文件里 `turn_alerts` / `live_alerts` 可关。控制类动作（Experimental、限速、变道规则、新增的“出发时还没 GPS 定位”规则、`night_only` 夜间热点）仍只记日志，第二步再接规划器。0f/10/11/12/13/14 离线回放：每趟 2–11 次提醒，防抖后不重复 | 已做，待上车验证 | 0012–0014、`_notes/hotspots_shadow_12_13_14.md` |
 | P2b | **影子规则补强**（目标：车能处理的静默，处理不了的提前通知）：① 导航转弯前限速（90° 转弯进路口前约 10–12 mph，`cruise_ceiling`）；② 出弯限加速（大转角/出弯 2 s 内约 0.5 m/s² 并保持 Experimental）；③ 用 `nextManeuver` 提前看下一个导航动作（11 rt80.6 只剩 31 m 才触发）；④ 接手提醒提前约 10 s / 150 m；⑤ fork/off ramp 在 400–800 m 外提醒选车道（驾驶员打灯后自动变道）；⑥ 两车道左转前、还没出现左转道时，自动左变道改为需要推方向盘确认（模型分不清左侧是不是对向车道） | 待做（先不急） | 0f rt170/216、10 rt145/297、11 rt81.5 |
 | P7 | **岔路注入意图**：导航 fork/off ramp/"靠左/靠右"时，在岔口前约 200–300 m 给模型注入 `keepLeft`/`keepRight` desire（仍由模型开车，路沿/导流区照样看）。先影子模式只记录"会注入"的时刻，确认时机后在一个已知岔路、驾驶员扶方向盘时实测；不做无灯自动变道，不改模型路径输出。当前模型对 keep 意图的反应强弱未知，可借 P8 离线回放先测 | 待做 | 10 rt297（需用户给视频时间确认位置） |
-| P8 | **模型对比**：A. 用现有 Model Manager 的随机模型（randomizer + 排除列表），每次启动换一个已安装模型；模型 id 其实已在日志里：modeld 每 5 s 发一次 `modeld.loaded`（`modelIdentity` 服务，进 qlog）；`tools/rav4/route_model.py` 读出每趟用的模型，`phone_pull --report` 写进 info.txt。0f/10/11 用的都是默认 `cheddar`（small），分析时按模型分组统计问题点。成本低，但每趟路况/光线不同，需要很多趟才有结论。B. 设备停车时离线回放：保留热点路段的全分辨率视频（`phone_pull` 内容选 4，或只留对应段），用 modeld 回放让各个模型跑同一段，对比红灯 shouldStop 时刻、出弯路径、岔路走向；同一输入下公平对比，也能离线测 P7 的 keep 意图。结论用来选默认模型；不在行驶中按路段切换模型（换模型要重启 modeld） | 待做（先 A 后 B） | 本次讨论 |
+| P8 | **模型对比**：A. 用现有 Model Manager 的随机模型（randomizer + 排除列表），每次启动换一个已安装模型；模型 id 其实已在日志里：modeld 每 5 s 发一次 `modeld.loaded`（`modelIdentity` 服务，进 qlog）；`tools/rav4/route_model.py` 读出每趟用的模型，`phone_pull --report` 写进 info.txt。0b～014 与 1c 用 `cheddar`，18/1a 用 `pop223`，1e 用 `gwm8223`（11/26 起 randomizer 已开；日志 logMessage 里 `modeld.loaded` 的 modelId 也能直接 grep）。分析时按模型分组统计问题点。成本低，但每趟路况/光线不同，需要很多趟才有结论。B. 设备停车时离线回放：保留热点路段的全分辨率视频（`phone_pull` 内容选 4，或只留对应段），用 modeld 回放让各个模型跑同一段，对比红灯 shouldStop 时刻、出弯路径、岔路走向；同一输入下公平对比，也能离线测 P7 的 keep 意图。结论用来选默认模型；不在行驶中按路段切换模型（换模型要重启 modeld） | 待做（先 A 后 B） | 本次讨论 |
 | P9 | **出发前按行程/天气选模型**：停车启动时根据导航目的地/路线（经过哪些热点、城市还是高速）、时间（白天/夜间）、天气，从模型清单里选一个模型（换模型要在 modeld 启动前，行驶中不换）。依赖 P8 的结论（每类路况哪个模型最好）；先做成"建议 + 驾驶员确认"，不自动切换。每趟模型 id 用 `route_model.py` 读 | 待做（依赖 P8） | 本次讨论 |
+| P10 | **变道途中盲区亮起要中止**（现状：BSM 只挡 preLaneChange；进入 laneChangeStarting 后 BSM 再亮不检查，也不报警）。证据：0000001c rt538.2 开始左变道，**540.5 左侧 BSM 亮**（64 mph，本车距左线约 1.3 m，还没压线），白色 SUV 从左后方超到左前方，542.6 本车才过线——如果有中止，540.5 时完全来得及退回。方案：① DesireHelper 在 laneChangeStarting 中，若目标侧 `leftBlindspot/rightBlindspot` 连续亮 ≥0.2 s（去抖）**且本车还没过线**（目标侧车道线到车中心 > 0.3 m，用 modelV2 laneLines；或 lane_change_ll_prob 仍 > 0.5），则回到 preLaneChange（desire=none，模型自己回车道中央），发 `laneChangeBlocked`（"Car Detected in Blindspot"）+ 提示音；② 已过线则继续完成（中途甩回更危险），同样报警；③ 中止后不算 `lane_change_performed`，盲区清空后按正常自动延时（1 s）重新开始；④ 日志记一个 `bsmAbort` 事件方便回放统计。测试：用 1c rt538–543 的 carState+modelV2 回放应在 540.7 左右中止；各趟里 BSM 在变道中亮起的次数（目前只发现这一次）都过一遍 | 待做（方案已定，待用户确认后实现） | _notes 1c rt540.5 |
+| P11 | **路沿保护触发时提示不对**：`road_edge_blocked` 时 DesireHelper 连司机扭矩也不认，但 UI 用 LANE_UNAVAILABLE 显示 "Steer to confirm when safe"。要加一个 phase（`roadEdgeBlocked @4`，`cereal/custom.capnp` + 重新生成 `cereal/gen`）和文案（如 "Lane Not Clear" / "Road edge beside the lane"）。需要能跑 capnpc 的环境 | 待做 | _notes 1e rt951–955 |
+| P12 | **大角度转向时不把方向盘扭矩当成"确认变道"**：司机自己在弯里打方向（如下匝道 -62°～-80°）且开着灯，现在扭矩方向一致就直接开始变道（1c rt754.9/759.9/765.0 连续三次）。方案：abs(方向盘角) > 45° 时 torque_applied 不算确认（自动变道照常看车道证据）。013 rt157.7 正确的那次是 -34°，不受影响 | 待用户确认 | _notes 1c rt752–770 |
 | P4 | T4 B 刹车上限：等出现 `vision_missed=true` 的片段再评估接入 | 只记录 | 32 §3 |
 | P5 | 装雷达 CAN 过滤器时：`radar_accel`（update-8）改为也在 `RADAR_CAN_FILTER` + Alpha Long 下启用；确认 T2/健康提示的门控 | 待硬件 | 对话 2026-11-24 |
 | P6 | 跟踪上游 stable：每次发布后重打本分支提交 | 持续 | T7 |
 
-已完成（摘要）：update-1～10（7.0 移植、雷达 FCW/健康提示、LTA 越界释放、Faster Takeoffs 窗口、驾驶员发力释放 LTA、红灯轻点油门只挪动、雷达 aRel、0001/0002/0004、0006（LTA 待机容忍 1 s）、0007（路沿过近禁止变道））；工具 `phone_pull.sh`、`gh_update.sh`。
+已完成（摘要）：SLC 导航确认驶出高速后清除踩油门保持的速度（highway_exit）；导航引导向打灯一侧时路沿保护阈值 2.5→1.8 m；update-1～10（7.0 移植、雷达 FCW/健康提示、LTA 越界释放、Faster Takeoffs 窗口、驾驶员发力释放 LTA、红灯轻点油门只挪动、雷达 aRel、0001/0002/0004、0006（LTA 待机容忍 1 s）、0007（路沿过近禁止变道））；工具 `phone_pull.sh`、`gh_update.sh`。
