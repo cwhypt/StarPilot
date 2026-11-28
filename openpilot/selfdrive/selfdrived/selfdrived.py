@@ -674,6 +674,11 @@ class SelfdriveD:
     elif self.sm['modelV2'].meta.laneChangeState in (LaneChangeState.laneChangeStarting,
                                                     LaneChangeState.laneChangeFinishing):
       self.events.add(EventName.laneChange)
+      # Past the line the change finishes (DesireHelper aborts only before it), but still warn.
+      direction = self.sm['modelV2'].meta.laneChangeDirection
+      if (CS.leftBlindspot and direction == LaneChangeDirection.left) or \
+         (CS.rightBlindspot and direction == LaneChangeDirection.right):
+        self.events.add(EventName.laneChangeBlocked)
 
     num_can_events = len(self.events)
     if CS.canTimeout:

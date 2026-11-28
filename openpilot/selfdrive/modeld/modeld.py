@@ -42,7 +42,7 @@ from openpilot.common.transformations.model import get_warp_matrix
 from openpilot.selfdrive.controls.lib.desire_helper import DesireHelper
 from openpilot.starpilot.lateral.lane_change_preferences import LiveLaneChangePolicy
 from openpilot.starpilot.lateral.adjacent_lane_evidence import (ROAD_EDGE_GUIDED_MIN_CLEARANCE_M, ROAD_EDGE_MIN_CLEARANCE_M,
-                                                                road_edge_too_close)
+                                                                road_edge_too_close, target_line_distance)
 from openpilot.starpilot.lateral.auto_lane_change import (
   ClockEpochGuard, auto_evidence, auto_trigger_engaged, paired_clocks_ns, session_policy, steering_capable,
 )
@@ -697,7 +697,11 @@ def main(demo=False):
                 road_edge_blocked=road_edge_too_close(modelv2_send.modelV2, direction,
                   ROAD_EDGE_GUIDED_MIN_CLEARANCE_M if guided_toward(sm, mono_now_ns, direction,
                     supported=navigation_turn.automatic_turn_enabled) else ROAD_EDGE_MIN_CLEARANCE_M),
-                navigation_guiding=navigation_guiding(sm, mono_now_ns, supported=navigation_turn.automatic_turn_enabled))
+                navigation_guiding=navigation_guiding(sm, mono_now_ns, supported=navigation_turn.automatic_turn_enabled),
+                target_line_m=target_line_distance(modelv2_send.modelV2, direction))
+      if DH.bsm_aborted:
+        cloudlog.event("lane_change.bsm_abort", direction=int(direction), v_ego=float(car_state.vEgo),
+                       target_line_m=target_line_distance(modelv2_send.modelV2, direction))
       modelv2_send.modelV2.meta.laneChangeState = DH.lane_change_state
       modelv2_send.modelV2.meta.laneChangeDirection = DH.lane_change_direction
 

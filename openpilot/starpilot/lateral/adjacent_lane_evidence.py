@@ -90,3 +90,24 @@ def road_edge_too_close(model, direction: int, minimum_clearance_m: float = ROAD
     return median(distances) < minimum_clearance_m
   except (AttributeError, IndexError, TypeError, ValueError, OverflowError):
     return False
+
+
+TARGET_LINE_MIN_PROB = 0.3
+
+
+def target_line_distance(model, direction: int) -> float | None:
+  """Lateral distance (m) from the car's center to the lane line on the lane-change side (-1 left, 1 right).
+
+  Positive while the center has not reached the line. None when the line is unknown or weak, so callers
+  must not act on it (fails safe for the blind-spot abort: no abort without a known position)."""
+  try:
+    if direction not in (-1, 1) or len(model.laneLines) != 4:
+      return None
+    index = 1 if direction == -1 else 2
+    if model.laneLineProbs[index] < TARGET_LINE_MIN_PROB:
+      return None
+    y = float(model.laneLines[index].y[0])
+    distance = -y if direction == -1 else y
+    return distance if math.isfinite(distance) else None
+  except (AttributeError, IndexError, TypeError, ValueError, OverflowError):
+    return None
